@@ -1,0 +1,1237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#0a0a0a" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="IRON LOG" />
+<title>IRON LOG</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<link rel="icon" href="icon-192.png" />
+<style>
+  html, body { margin: 0; padding: 0; background: #0a0a0a; overscroll-behavior: none; }
+  #root { min-height: 100vh; }
+  body { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+</style>
+
+<!-- React + Babel from CDN (no build step needed) -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- localStorage shim that mimics window.storage API -->
+<script>
+window.storage = {
+  get: async (key) => {
+    const v = localStorage.getItem(key);
+    if (v === null) return null;
+    return { key, value: v };
+  },
+  set: async (key, value) => {
+    localStorage.setItem(key, value);
+    return { key, value };
+  },
+  delete: async (key) => {
+    localStorage.removeItem(key);
+    return { key, deleted: true };
+  },
+  list: async (prefix = "") => {
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k.startsWith(prefix)) keys.push(k);
+    }
+    return { keys, prefix };
+  }
+};
+
+// Register service worker for offline support
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => console.log('SW failed', err));
+  });
+}
+</script>
+
+<script type="text/babel" data-presets="react" data-type="module">
+const { useState, useEffect, useMemo } = React;
+
+// ====== DEFAULT WORKOUT PLAN ======
+const defaultPlan = {
+  1: { day: "Monday", label: "Upper Chest · Shoulders · Triceps", tag: "PUSH A", color: "#FF6B35",
+    muscles: ["Upper Chest", "Front Delts", "Side Delts", "Triceps"],
+    exercises: [
+      { name: "Incline Barbell Press", sets: 4, reps: "6–8", muscle: "Upper Chest", note: "45° incline, full stretch at bottom" },
+      { name: "Incline Dumbbell Fly", sets: 3, reps: "10–12", muscle: "Upper Chest", note: "Control negative, squeeze at top" },
+      { name: "Cable Crossover (High to Low)", sets: 3, reps: "12–15", muscle: "Upper Chest", note: "Focus on upper pec contraction" },
+      { name: "Seated Dumbbell Shoulder Press", sets: 4, reps: "8–10", muscle: "Front/Side Delts", note: "Press to full lockout overhead" },
+      { name: "Lateral Raises", sets: 4, reps: "12–15", muscle: "Side Delts", note: "Slight bend in elbow, lead with pinky" },
+      { name: "Front Raises (Plate)", sets: 3, reps: "12", muscle: "Front Delts", note: "Controlled, no momentum" },
+      { name: "Skull Crushers (EZ-Bar)", sets: 3, reps: "10–12", muscle: "Triceps", note: "Lower bar to forehead slowly" },
+      { name: "Tricep Rope Pushdown", sets: 3, reps: "12–15", muscle: "Triceps", note: "Spread rope at bottom, full extension" },
+    ]},
+  2: { day: "Tuesday", label: "Back Pull · Biceps", tag: "PULL A", color: "#4ECDC4",
+    muscles: ["Lats", "Upper Back", "Rear Delts", "Biceps", "Forearms"],
+    exercises: [
+      { name: "Pull-Ups / Weighted Pull-Ups", sets: 4, reps: "6–8", muscle: "Lats", note: "Full hang to chin over bar" },
+      { name: "Barbell Bent-Over Row", sets: 4, reps: "6–8", muscle: "Upper Back/Lats", note: "Overhand grip, row to belly button" },
+      { name: "Seated Cable Row", sets: 3, reps: "10–12", muscle: "Mid Back", note: "Keep chest up, drive elbows back" },
+      { name: "Single-Arm Dumbbell Row", sets: 3, reps: "10–12", muscle: "Lats", note: "Full ROM, big stretch" },
+      { name: "Face Pulls", sets: 3, reps: "15–20", muscle: "Rear Delts/Traps", note: "Pull to forehead, external rotate" },
+      { name: "Barbell Bicep Curl", sets: 4, reps: "8–10", muscle: "Biceps", note: "No swinging, full supination" },
+      { name: "Incline Dumbbell Curl", sets: 3, reps: "10–12", muscle: "Biceps (Long Head)", note: "Arms behind body for stretch" },
+      { name: "Hammer Curl", sets: 3, reps: "12", muscle: "Brachialis/Forearms", note: "Neutral grip, controlled" },
+    ]},
+  3: { day: "Wednesday", label: "Legs · Squats Focus", tag: "LEGS A", color: "#FFE66D",
+    muscles: ["Quads", "Glutes", "Hamstrings", "Calves", "Core"],
+    exercises: [
+      { name: "Barbell Back Squat", sets: 5, reps: "5–6", muscle: "Quads/Glutes", note: "Below parallel, chest tall, knees out" },
+      { name: "Front Squat / Goblet Squat", sets: 3, reps: "8–10", muscle: "Quads", note: "More upright = more quad bias" },
+      { name: "Leg Press", sets: 3, reps: "10–12", muscle: "Quads/Glutes", note: "Feet shoulder-width, full range" },
+      { name: "Bulgarian Split Squat", sets: 3, reps: "10–12", muscle: "Quads/Glutes", note: "Each leg" },
+      { name: "Leg Extension", sets: 3, reps: "15", muscle: "Quads", note: "Pause at top, control down" },
+      { name: "Romanian Deadlift", sets: 3, reps: "10–12", muscle: "Hamstrings/Glutes", note: "Hinge at hips, feel stretch" },
+      { name: "Seated Calf Raise", sets: 4, reps: "15–20", muscle: "Soleus", note: "Full stretch at bottom" },
+      { name: "Standing Calf Raise", sets: 4, reps: "15–20", muscle: "Gastrocnemius", note: "Straight leg targets gastroc" },
+      { name: "Plank / Ab Wheel", sets: 3, reps: "30–60s", muscle: "Core", note: "Brace abs, neutral spine" },
+    ]},
+  4: { day: "Thursday", label: "Lower Chest · Shoulders · Triceps", tag: "PUSH B", color: "#A78BFA",
+    muscles: ["Lower Chest", "Side Delts", "Rear Delts", "Triceps"],
+    exercises: [
+      { name: "Flat Barbell Bench Press", sets: 4, reps: "6–8", muscle: "Lower/Mid Chest", note: "Touch chest, drive up explosively" },
+      { name: "Decline Dumbbell Press", sets: 3, reps: "10–12", muscle: "Lower Chest", note: "Decline angle hits lower pec" },
+      { name: "Cable Crossover (Low to High)", sets: 3, reps: "12–15", muscle: "Lower Chest", note: "Drive up and across" },
+      { name: "Dips (Chest-Focused)", sets: 3, reps: "10–12", muscle: "Lower Chest", note: "Lean forward, go deep" },
+      { name: "Lateral Raises (Cable)", sets: 4, reps: "12–15", muscle: "Side Delts", note: "Cable keeps tension full ROM" },
+      { name: "Rear Delt Fly", sets: 3, reps: "15", muscle: "Rear Delts", note: "Squeeze shoulder blades" },
+      { name: "Overhead Tricep Extension", sets: 3, reps: "12", muscle: "Triceps", note: "Overhead = long head stretch" },
+      { name: "Tricep Dips", sets: 3, reps: "12–15", muscle: "Triceps", note: "Elbows in tight to body" },
+    ]},
+  5: { day: "Friday", label: "Back Push · Biceps", tag: "PULL B", color: "#34D399",
+    muscles: ["Lats", "Traps", "Rhomboids", "Rear Delts", "Biceps"],
+    exercises: [
+      { name: "Deadlift", sets: 4, reps: "4–5", muscle: "Full Back", note: "King of all exercises. Brace hard." },
+      { name: "Lat Pulldown (Wide Grip)", sets: 4, reps: "8–10", muscle: "Lats", note: "Pull to upper chest" },
+      { name: "T-Bar Row", sets: 3, reps: "8–10", muscle: "Mid Back", note: "Elbows flared = upper back focus" },
+      { name: "Straight-Arm Pulldown", sets: 3, reps: "12–15", muscle: "Lats", note: "Arms straight, hinge at shoulder" },
+      { name: "Shrugs", sets: 4, reps: "12–15", muscle: "Traps", note: "Straight up, don't roll shoulders" },
+      { name: "EZ-Bar Preacher Curl", sets: 4, reps: "10–12", muscle: "Biceps", note: "Full extension, no cheating" },
+      { name: "Cable Curl", sets: 3, reps: "12–15", muscle: "Biceps", note: "Constant tension" },
+      { name: "Reverse Curl", sets: 3, reps: "12", muscle: "Forearms", note: "Builds forearm thickness" },
+    ]},
+  6: { day: "Saturday", label: "Legs · Hamstrings & Calves", tag: "LEGS B", color: "#F472B6",
+    muscles: ["Hamstrings", "Glutes", "Calves", "Abductors", "Core"],
+    exercises: [
+      { name: "Romanian Deadlift", sets: 4, reps: "6–8", muscle: "Hamstrings", note: "Hip hinge king" },
+      { name: "Lying Leg Curl", sets: 4, reps: "10–12", muscle: "Hamstrings", note: "Toes pointed, curl explosively" },
+      { name: "Seated Leg Curl", sets: 3, reps: "12–15", muscle: "Hamstrings", note: "Hits lower ham differently" },
+      { name: "Stiff-Leg Deadlift", sets: 3, reps: "10–12", muscle: "Hamstrings", note: "Stretch at bottom is key" },
+      { name: "Hip Thrust (Barbell)", sets: 4, reps: "10–12", muscle: "Glutes", note: "Drive hips up, squeeze top" },
+      { name: "Cable Kickback", sets: 3, reps: "15", muscle: "Glutes", note: "Full extension, slow negative" },
+      { name: "Abductor Machine", sets: 3, reps: "15–20", muscle: "Abductors", note: "Slow and controlled" },
+      { name: "Standing Calf Raise", sets: 5, reps: "15–20", muscle: "Gastrocnemius", note: "Heavy, full stretch" },
+      { name: "Seated Calf Raise", sets: 4, reps: "20–25", muscle: "Soleus", note: "High reps for soleus" },
+      { name: "Hanging Leg Raise", sets: 3, reps: "15–20", muscle: "Core", note: "Full range, control swing" },
+    ]},
+  0: { day: "Sunday", label: "Rest & Recovery", tag: "REST", color: "#6B7280",
+    muscles: ["Recovery"], exercises: [], isRest: true },
+};
+
+// ====== FOOD DATABASE ======
+const foodDB = [
+  { name: "Chicken Breast (cooked)", serving: "100g", kcal: 165, p: 31, c: 0, f: 3.6, fb: 0, s: 0, cat: "Protein" },
+  { name: "Chicken Thigh (cooked)", serving: "100g", kcal: 209, p: 26, c: 0, f: 11, fb: 0, s: 0, cat: "Protein" },
+  { name: "Egg (whole, large)", serving: "1 egg", kcal: 72, p: 6, c: 0.4, f: 5, fb: 0, s: 0.2, cat: "Protein" },
+  { name: "Egg White", serving: "1 egg", kcal: 17, p: 3.6, c: 0.2, f: 0.1, fb: 0, s: 0.2, cat: "Protein" },
+  { name: "Ground Beef 85/15 (cooked)", serving: "100g", kcal: 215, p: 26, c: 0, f: 12, fb: 0, s: 0, cat: "Protein" },
+  { name: "Salmon (cooked)", serving: "100g", kcal: 206, p: 22, c: 0, f: 13, fb: 0, s: 0, cat: "Protein" },
+  { name: "Tuna (canned in water)", serving: "100g", kcal: 116, p: 26, c: 0, f: 1, fb: 0, s: 0, cat: "Protein" },
+  { name: "Tilapia (cooked)", serving: "100g", kcal: 128, p: 26, c: 0, f: 2.7, fb: 0, s: 0, cat: "Protein" },
+  { name: "Pork Tenderloin (cooked)", serving: "100g", kcal: 143, p: 26, c: 0, f: 3.5, fb: 0, s: 0, cat: "Protein" },
+  { name: "Turkey Breast (cooked)", serving: "100g", kcal: 135, p: 30, c: 0, f: 1, fb: 0, s: 0, cat: "Protein" },
+  { name: "Whey Protein Powder", serving: "1 scoop (30g)", kcal: 120, p: 24, c: 3, f: 1.5, fb: 0, s: 2, cat: "Protein" },
+  { name: "Greek Yogurt (plain, 0%)", serving: "170g cup", kcal: 100, p: 17, c: 6, f: 0, fb: 0, s: 6, cat: "Protein" },
+  { name: "Cottage Cheese (low-fat)", serving: "100g", kcal: 81, p: 11, c: 3.4, f: 2.3, fb: 0, s: 2.7, cat: "Protein" },
+  { name: "Tofu (firm)", serving: "100g", kcal: 144, p: 17, c: 3, f: 9, fb: 2, s: 1, cat: "Protein" },
+  { name: "Tempeh", serving: "100g", kcal: 192, p: 20, c: 8, f: 11, fb: 0, s: 0, cat: "Protein" },
+  { name: "Shrimp (cooked)", serving: "100g", kcal: 99, p: 24, c: 0.2, f: 0.3, fb: 0, s: 0, cat: "Protein" },
+  { name: "White Rice (cooked)", serving: "1 cup (158g)", kcal: 205, p: 4.3, c: 45, f: 0.4, fb: 0.6, s: 0, cat: "Carbs" },
+  { name: "Brown Rice (cooked)", serving: "1 cup (195g)", kcal: 216, p: 5, c: 45, f: 1.8, fb: 3.5, s: 0.7, cat: "Carbs" },
+  { name: "Oats (dry)", serving: "1/2 cup (40g)", kcal: 150, p: 5, c: 27, f: 3, fb: 4, s: 1, cat: "Carbs" },
+  { name: "Whole Wheat Bread", serving: "1 slice", kcal: 80, p: 4, c: 14, f: 1, fb: 2, s: 1.5, cat: "Carbs" },
+  { name: "White Bread", serving: "1 slice", kcal: 75, p: 2, c: 14, f: 1, fb: 0.7, s: 1.4, cat: "Carbs" },
+  { name: "Bagel (plain)", serving: "1 medium", kcal: 245, p: 10, c: 48, f: 1.5, fb: 2, s: 6, cat: "Carbs" },
+  { name: "Pasta (cooked)", serving: "1 cup (140g)", kcal: 220, p: 8, c: 43, f: 1.3, fb: 2.5, s: 0.8, cat: "Carbs" },
+  { name: "Quinoa (cooked)", serving: "1 cup (185g)", kcal: 222, p: 8, c: 39, f: 3.5, fb: 5, s: 1.6, cat: "Carbs" },
+  { name: "Sweet Potato (baked)", serving: "1 medium", kcal: 103, p: 2.3, c: 24, f: 0.2, fb: 3.8, s: 7, cat: "Carbs" },
+  { name: "Potato (baked, w/ skin)", serving: "1 medium", kcal: 161, p: 4.3, c: 37, f: 0.2, fb: 3.8, s: 2, cat: "Carbs" },
+  { name: "Tortilla (flour, 8\")", serving: "1 tortilla", kcal: 140, p: 4, c: 23, f: 4, fb: 1, s: 1, cat: "Carbs" },
+  { name: "Corn Tortilla", serving: "1 tortilla", kcal: 60, p: 1.5, c: 12, f: 0.7, fb: 1.5, s: 0.2, cat: "Carbs" },
+  { name: "Rice Cake", serving: "1 cake", kcal: 35, p: 0.7, c: 7.3, f: 0.3, fb: 0.4, s: 0.1, cat: "Carbs" },
+  { name: "Banana", serving: "1 medium", kcal: 105, p: 1.3, c: 27, f: 0.4, fb: 3, s: 14, cat: "Fruit" },
+  { name: "Apple", serving: "1 medium", kcal: 95, p: 0.5, c: 25, f: 0.3, fb: 4.4, s: 19, cat: "Fruit" },
+  { name: "Orange", serving: "1 medium", kcal: 62, p: 1.2, c: 15, f: 0.2, fb: 3, s: 12, cat: "Fruit" },
+  { name: "Strawberries", serving: "1 cup (152g)", kcal: 49, p: 1, c: 12, f: 0.5, fb: 3, s: 7, cat: "Fruit" },
+  { name: "Blueberries", serving: "1 cup (148g)", kcal: 84, p: 1.1, c: 21, f: 0.5, fb: 3.6, s: 15, cat: "Fruit" },
+  { name: "Grapes", serving: "1 cup (151g)", kcal: 104, p: 1.1, c: 27, f: 0.2, fb: 1.4, s: 23, cat: "Fruit" },
+  { name: "Mango", serving: "1 cup (165g)", kcal: 99, p: 1.4, c: 25, f: 0.6, fb: 2.6, s: 23, cat: "Fruit" },
+  { name: "Pineapple", serving: "1 cup (165g)", kcal: 82, p: 0.9, c: 22, f: 0.2, fb: 2.3, s: 16, cat: "Fruit" },
+  { name: "Watermelon", serving: "1 cup (152g)", kcal: 46, p: 0.9, c: 11, f: 0.2, fb: 0.6, s: 9, cat: "Fruit" },
+  { name: "Avocado", serving: "1/2 medium", kcal: 161, p: 2, c: 8.6, f: 15, fb: 6.7, s: 0.7, cat: "Fruit" },
+  { name: "Broccoli (cooked)", serving: "1 cup (156g)", kcal: 55, p: 3.7, c: 11, f: 0.6, fb: 5, s: 2.2, cat: "Veg" },
+  { name: "Spinach (raw)", serving: "1 cup (30g)", kcal: 7, p: 0.9, c: 1.1, f: 0.1, fb: 0.7, s: 0.1, cat: "Veg" },
+  { name: "Spinach (cooked)", serving: "1 cup (180g)", kcal: 41, p: 5.3, c: 6.7, f: 0.5, fb: 4.3, s: 0.8, cat: "Veg" },
+  { name: "Carrots (raw)", serving: "1 medium", kcal: 25, p: 0.6, c: 6, f: 0.1, fb: 1.7, s: 2.9, cat: "Veg" },
+  { name: "Bell Pepper (red)", serving: "1 medium", kcal: 37, p: 1.2, c: 7.2, f: 0.4, fb: 2.5, s: 5, cat: "Veg" },
+  { name: "Tomato", serving: "1 medium", kcal: 22, p: 1.1, c: 4.8, f: 0.2, fb: 1.5, s: 3.2, cat: "Veg" },
+  { name: "Cucumber", serving: "1 cup (104g)", kcal: 16, p: 0.7, c: 3.8, f: 0.1, fb: 0.5, s: 1.7, cat: "Veg" },
+  { name: "Lettuce (mixed greens)", serving: "1 cup (47g)", kcal: 9, p: 0.9, c: 1.7, f: 0.1, fb: 1.1, s: 0.7, cat: "Veg" },
+  { name: "Asparagus (cooked)", serving: "1 cup (180g)", kcal: 40, p: 4.3, c: 7.4, f: 0.4, fb: 3.6, s: 2.3, cat: "Veg" },
+  { name: "Green Beans (cooked)", serving: "1 cup (125g)", kcal: 44, p: 2.4, c: 10, f: 0.4, fb: 4, s: 4.5, cat: "Veg" },
+  { name: "Cauliflower (cooked)", serving: "1 cup (124g)", kcal: 29, p: 2.3, c: 5.3, f: 0.6, fb: 2.9, s: 2.6, cat: "Veg" },
+  { name: "Onion", serving: "1/2 cup (80g)", kcal: 32, p: 0.9, c: 7.5, f: 0.1, fb: 1.4, s: 3.4, cat: "Veg" },
+  { name: "Almonds", serving: "1 oz (28g)", kcal: 164, p: 6, c: 6, f: 14, fb: 3.5, s: 1.2, cat: "Fats" },
+  { name: "Peanut Butter", serving: "2 tbsp (32g)", kcal: 188, p: 8, c: 6, f: 16, fb: 2, s: 3, cat: "Fats" },
+  { name: "Almond Butter", serving: "2 tbsp (32g)", kcal: 196, p: 7, c: 6, f: 18, fb: 3.3, s: 1.5, cat: "Fats" },
+  { name: "Walnuts", serving: "1 oz (28g)", kcal: 185, p: 4.3, c: 3.9, f: 18, fb: 1.9, s: 0.7, cat: "Fats" },
+  { name: "Cashews", serving: "1 oz (28g)", kcal: 157, p: 5, c: 9, f: 12, fb: 0.9, s: 1.7, cat: "Fats" },
+  { name: "Olive Oil", serving: "1 tbsp", kcal: 119, p: 0, c: 0, f: 13.5, fb: 0, s: 0, cat: "Fats" },
+  { name: "Butter", serving: "1 tbsp", kcal: 102, p: 0.1, c: 0, f: 11.5, fb: 0, s: 0, cat: "Fats" },
+  { name: "Cheddar Cheese", serving: "1 oz (28g)", kcal: 115, p: 7, c: 0.4, f: 9.5, fb: 0, s: 0.1, cat: "Fats" },
+  { name: "Mozzarella (part-skim)", serving: "1 oz (28g)", kcal: 72, p: 7, c: 0.8, f: 4.5, fb: 0, s: 0.3, cat: "Fats" },
+  { name: "Whole Milk", serving: "1 cup (244g)", kcal: 149, p: 7.7, c: 12, f: 8, fb: 0, s: 12, cat: "Fats" },
+  { name: "Skim Milk", serving: "1 cup (244g)", kcal: 83, p: 8, c: 12, f: 0.2, fb: 0, s: 12, cat: "Fats" },
+  { name: "Dark Chocolate (70%)", serving: "1 oz (28g)", kcal: 170, p: 2, c: 13, f: 12, fb: 3, s: 7, cat: "Other" },
+  { name: "Protein Bar (typical)", serving: "1 bar", kcal: 200, p: 20, c: 22, f: 6, fb: 5, s: 5, cat: "Other" },
+  { name: "Granola Bar", serving: "1 bar", kcal: 120, p: 2, c: 19, f: 4, fb: 1, s: 8, cat: "Other" },
+  { name: "Coffee (black)", serving: "1 cup", kcal: 2, p: 0.3, c: 0, f: 0, fb: 0, s: 0, cat: "Other" },
+  { name: "Beer (regular)", serving: "12 oz", kcal: 153, p: 1.6, c: 13, f: 0, fb: 0, s: 0, cat: "Other" },
+  { name: "Wine (red)", serving: "5 oz", kcal: 125, p: 0.1, c: 4, f: 0, fb: 0, s: 0.9, cat: "Other" },
+  { name: "Soda (cola)", serving: "12 oz can", kcal: 140, p: 0, c: 39, f: 0, fb: 0, s: 39, cat: "Other" },
+  { name: "Pizza (cheese)", serving: "1 slice", kcal: 285, p: 12, c: 36, f: 10, fb: 2, s: 4, cat: "Other" },
+  { name: "Cheeseburger (fast food)", serving: "1 burger", kcal: 535, p: 25, c: 41, f: 30, fb: 2, s: 9, cat: "Other" },
+  { name: "French Fries (medium)", serving: "117g", kcal: 365, p: 4, c: 48, f: 17, fb: 4, s: 0.4, cat: "Other" },
+];
+
+const cardioTypes = [
+  { id: "walk_flat", name: "Walking (flat)", icon: "🚶", met: 3.5, hasIncline: false, hasSpeed: true, defaultSpeed: 5 },
+  { id: "walk_incline", name: "Incline Walking", icon: "⛰️", met: 6.0, hasIncline: true, hasSpeed: true, defaultSpeed: 5, defaultIncline: 10 },
+  { id: "run_easy", name: "Running (easy)", icon: "🏃", met: 8.3, hasIncline: false, hasSpeed: true, defaultSpeed: 8 },
+  { id: "run_moderate", name: "Running (moderate)", icon: "🏃‍♂️", met: 10.0, hasIncline: false, hasSpeed: true, defaultSpeed: 10 },
+  { id: "run_fast", name: "Running (fast)", icon: "💨", met: 12.5, hasIncline: false, hasSpeed: true, defaultSpeed: 13 },
+  { id: "cycle_light", name: "Cycling (light)", icon: "🚴", met: 6.0, hasIncline: false, hasSpeed: false },
+  { id: "cycle_moderate", name: "Cycling (moderate)", icon: "🚴‍♂️", met: 8.0, hasIncline: false, hasSpeed: false },
+  { id: "cycle_vigorous", name: "Cycling (vigorous)", icon: "🚴‍♀️", met: 10.0, hasIncline: false, hasSpeed: false },
+  { id: "elliptical", name: "Elliptical", icon: "🌀", met: 5.0, hasIncline: false, hasSpeed: false },
+  { id: "rowing", name: "Rowing Machine", icon: "🚣", met: 7.0, hasIncline: false, hasSpeed: false },
+  { id: "stairmaster", name: "Stairmaster", icon: "🪜", met: 9.0, hasIncline: false, hasSpeed: false },
+  { id: "swimming", name: "Swimming", icon: "🏊", met: 8.0, hasIncline: false, hasSpeed: false },
+  { id: "jump_rope", name: "Jump Rope", icon: "🤸", met: 12.3, hasIncline: false, hasSpeed: false },
+  { id: "hiit", name: "HIIT", icon: "🔥", met: 9.0, hasIncline: false, hasSpeed: false },
+];
+
+const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const dayShort = ["S","M","T","W","T","F","S"];
+const fmtDate = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+
+function calcBMR(weight, height, age, sex) {
+  const w = parseFloat(weight), h = parseFloat(height), a = parseFloat(age);
+  if (!w || !h || !a) return 0;
+  return sex === "male" ? 10*w + 6.25*h - 5*a + 5 : 10*w + 6.25*h - 5*a - 161;
+}
+function calcCardioCalories(met, durationMin, weightKg, incline = 0) {
+  const w = parseFloat(weightKg) || 70;
+  return Math.round((met * 3.5 * w * (1 + incline*0.04) / 200) * durationMin);
+}
+function calcLiftCalories(sets, weightKg) {
+  const w = parseFloat(weightKg) || 70;
+  return Math.round((5 * 3.5 * w / 200) * sets * 1.5);
+}
+function calcStepCalories(steps, weightKg) {
+  const w = parseFloat(weightKg) || 70;
+  return Math.round(steps * 0.0005 * w);
+}
+const activityMultipliers = { sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, athlete: 1.9 };
+const goalAdjustments = { cut: -500, recomp: -250, maintain: 0, lean_bulk: 250, bulk: 500 };
+
+function IronLog() {
+  const [view, setView] = useState("today");
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [logs, setLogs] = useState({});
+  const [foodLogs, setFoodLogs] = useState({});
+  const [cardioLogs, setCardioLogs] = useState({});
+  const [stepLogs, setStepLogs] = useState({});
+  const [customPlan, setCustomPlan] = useState(null);
+  const [customFoods, setCustomFoods] = useState([]);
+  const [profile, setProfile] = useState({ weight:"", height:"", age:"", sex:"male", activity:"moderate", goal:"maintain", stepGoal:10000 });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [w,f,c,s,p,pl,cf] = await Promise.all([
+          window.storage.get("workout-logs").catch(()=>null),
+          window.storage.get("food-logs").catch(()=>null),
+          window.storage.get("cardio-logs").catch(()=>null),
+          window.storage.get("step-logs").catch(()=>null),
+          window.storage.get("profile").catch(()=>null),
+          window.storage.get("custom-plan").catch(()=>null),
+          window.storage.get("custom-foods").catch(()=>null),
+        ]);
+        if (w?.value) setLogs(JSON.parse(w.value));
+        if (f?.value) setFoodLogs(JSON.parse(f.value));
+        if (c?.value) setCardioLogs(JSON.parse(c.value));
+        if (s?.value) setStepLogs(JSON.parse(s.value));
+        if (p?.value) setProfile(JSON.parse(p.value));
+        if (pl?.value && pl.value !== "null") setCustomPlan(JSON.parse(pl.value));
+        if (cf?.value) setCustomFoods(JSON.parse(cf.value));
+      } catch {}
+      setLoading(false);
+    })();
+  }, []);
+
+  const addCustomFood = (food) => {
+    const newFood = { ...food, custom: true, id: `custom_${Date.now()}` };
+    const updated = [...customFoods, newFood];
+    setCustomFoods(updated);
+    saveData("custom-foods", updated);
+  };
+  const updateCustomFood = (id, updates) => {
+    const updated = customFoods.map(f => f.id === id ? { ...f, ...updates } : f);
+    setCustomFoods(updated);
+    saveData("custom-foods", updated);
+  };
+  const deleteCustomFood = (id) => {
+    const updated = customFoods.filter(f => f.id !== id);
+    setCustomFoods(updated);
+    saveData("custom-foods", updated);
+  };
+
+  const saveData = async (key, value) => {
+    setSaving(true);
+    try { await window.storage.set(key, JSON.stringify(value)); } catch {}
+    setTimeout(()=>setSaving(false), 400);
+  };
+
+  const plan = customPlan || defaultPlan;
+  const dateKey = fmtDate(selectedDate);
+  const dow = selectedDate.getDay();
+  const todayPlan = plan[dow];
+  const dayLogs = logs[dateKey] || {};
+  const todayFood = foodLogs[dateKey] || [];
+  const todayCardio = cardioLogs[dateKey] || [];
+  const todaySteps = stepLogs[dateKey] || 0;
+
+  const toggleExercise = (idx) => {
+    const newLogs = { ...logs, [dateKey]: { ...dayLogs, [idx]: !dayLogs[idx] }};
+    setLogs(newLogs); saveData("workout-logs", newLogs);
+  };
+  const updateExercise = (dayKey, idx, updates) => {
+    const newPlan = JSON.parse(JSON.stringify(plan));
+    newPlan[dayKey].exercises[idx] = { ...newPlan[dayKey].exercises[idx], ...updates };
+    setCustomPlan(newPlan); saveData("custom-plan", newPlan);
+  };
+  const addExercise = (dayKey, exercise) => {
+    const newPlan = JSON.parse(JSON.stringify(plan));
+    newPlan[dayKey].exercises.push(exercise);
+    setCustomPlan(newPlan); saveData("custom-plan", newPlan);
+  };
+  const deleteExercise = (dayKey, idx) => {
+    const newPlan = JSON.parse(JSON.stringify(plan));
+    newPlan[dayKey].exercises.splice(idx, 1);
+    setCustomPlan(newPlan); saveData("custom-plan", newPlan);
+  };
+  const resetPlan = () => { setCustomPlan(null); saveData("custom-plan", null); };
+
+  const addFood = (food, multiplier = 1) => {
+    const entry = {
+      id: Date.now(), name: food.name, serving: food.serving, multiplier,
+      kcal: Math.round(food.kcal * multiplier),
+      p: +(food.p * multiplier).toFixed(1), c: +(food.c * multiplier).toFixed(1),
+      f: +(food.f * multiplier).toFixed(1), fb: +(food.fb * multiplier).toFixed(1),
+      s: +(food.s * multiplier).toFixed(1),
+    };
+    const newLogs = { ...foodLogs, [dateKey]: [...todayFood, entry] };
+    setFoodLogs(newLogs); saveData("food-logs", newLogs);
+  };
+  const removeFood = (id) => {
+    const newLogs = { ...foodLogs, [dateKey]: todayFood.filter(e=>e.id!==id) };
+    setFoodLogs(newLogs); saveData("food-logs", newLogs);
+  };
+  const addCardio = (entry) => {
+    const newLogs = { ...cardioLogs, [dateKey]: [...todayCardio, { ...entry, id: Date.now() }] };
+    setCardioLogs(newLogs); saveData("cardio-logs", newLogs);
+  };
+  const removeCardio = (id) => {
+    const newLogs = { ...cardioLogs, [dateKey]: todayCardio.filter(e=>e.id!==id) };
+    setCardioLogs(newLogs); saveData("cardio-logs", newLogs);
+  };
+  const updateSteps = (steps) => {
+    const newLogs = { ...stepLogs, [dateKey]: steps };
+    setStepLogs(newLogs); saveData("step-logs", newLogs);
+  };
+  const updateProfile = (newProfile) => { setProfile(newProfile); saveData("profile", newProfile); };
+
+  const foodTotals = useMemo(()=>todayFood.reduce((acc,e)=>({
+    kcal:acc.kcal+e.kcal, p:acc.p+e.p, c:acc.c+e.c, f:acc.f+e.f, fb:acc.fb+e.fb, s:acc.s+e.s,
+  }),{kcal:0,p:0,c:0,f:0,fb:0,s:0}),[todayFood]);
+
+  const liftingBurn = useMemo(()=>{
+    if (!todayPlan.exercises) return 0;
+    const sets = todayPlan.exercises.reduce((sum,ex,i)=>sum+(dayLogs[i]?ex.sets:0),0);
+    return calcLiftCalories(sets, profile.weight);
+  },[todayPlan,dayLogs,profile.weight]);
+  const cardioBurn = useMemo(()=>todayCardio.reduce((s,c)=>s+c.kcal,0),[todayCardio]);
+  const stepBurn = useMemo(()=>calcStepCalories(todaySteps, profile.weight),[todaySteps,profile.weight]);
+  const totalBurn = liftingBurn + cardioBurn + stepBurn;
+
+  const targets = useMemo(()=>{
+    const bmr = calcBMR(profile.weight, profile.height, profile.age, profile.sex);
+    if (!bmr) return null;
+    const tdee = bmr * activityMultipliers[profile.activity];
+    const target = Math.round(tdee + goalAdjustments[profile.goal]);
+    const w = parseFloat(profile.weight) || 70;
+    const protein = Math.round(w * 2);
+    const fat = Math.round((target * 0.25) / 9);
+    const carbs = Math.round((target - protein*4 - fat*9) / 4);
+    return { kcal:target, p:protein, c:carbs, f:fat, fb:30, bmr:Math.round(bmr), tdee:Math.round(tdee) };
+  },[profile]);
+
+  const netCalories = foodTotals.kcal - totalBurn;
+  const completedCount = todayPlan.exercises.filter((_,i)=>dayLogs[i]).length;
+  const totalCount = todayPlan.exercises.length;
+  const progress = totalCount > 0 ? Math.round((completedCount/totalCount)*100) : 0;
+
+  const today = new Date();
+  let streak = 0; let cursor = new Date(today);
+  while (true) {
+    const k = fmtDate(cursor);
+    const dp = plan[cursor.getDay()];
+    if (dp.isRest) { cursor.setDate(cursor.getDate()-1); if (streak>100) break; continue; }
+    const dl = logs[k];
+    if (!dl || !Object.values(dl).some(Boolean)) break;
+    streak++; cursor.setDate(cursor.getDate()-1);
+    if (streak>365) break;
+  }
+
+  if (loading) return <div style={{minHeight:"100vh",background:"#0a0a0a",color:"#666",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace"}}>Loading...</div>;
+
+  const isToday = fmtDate(today) === dateKey;
+
+  return (
+    <div style={{minHeight:"100vh",background:"#0a0a0a",fontFamily:"'DM Mono','Courier New',monospace",color:"#e8e8e8",paddingBottom:90}}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Bebas+Neue&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        button, input, select { font-family: inherit; }
+        button { cursor: pointer; }
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: #111; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+        .fade-in { animation: fadeIn 0.25s ease forwards; }
+        .ex-row:active, .food-row:active { transform: scale(0.99); }
+        input, select, textarea {
+          background: #1a1a1a; border: 1px solid #2a2a2a; color: #e8e8e8;
+          padding: 10px 12px; border-radius: 4px; font-size: 13px; width: 100%;
+        }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: #FF6B35; }
+      `}</style>
+
+      <div style={{padding:"20px 20px 10px",maxWidth:720,margin:"0 auto"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+          <div>
+            <div style={{fontSize:9,letterSpacing:5,color:"#555"}}>TRAIN · CARDIO · FOOD</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:36,lineHeight:1,color:"#fff",letterSpacing:2,marginTop:2}}>IRON LOG</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:9,color:"#555",letterSpacing:2}}>STREAK</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,color:streak>0?"#FF6B35":"#333",lineHeight:1}}>🔥{streak}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{display:"flex",gap:3,padding:"0 16px",maxWidth:720,margin:"0 auto 14px",overflowX:"auto"}}>
+        {[{id:"today",label:"TRAIN"},{id:"cardio",label:"CARDIO"},{id:"food",label:"FOOD"},{id:"calendar",label:"CAL"},{id:"stats",label:"STATS"},{id:"profile",label:"ME"}].map(t=>(
+          <button key={t.id} onClick={()=>setView(t.id)} style={{
+            flex:1,padding:"10px 6px",minWidth:50,
+            background:view===t.id?"#1a1a1a":"transparent",
+            color:view===t.id?"#fff":"#555",
+            fontSize:9,letterSpacing:2,
+            border:`1px solid ${view===t.id?"#333":"#1a1a1a"}`,
+            borderRadius:4,
+          }}>{t.label}</button>
+        ))}
+      </div>
+
+      {view==="today" && <TrainView {...{selectedDate,setSelectedDate,todayPlan,dayLogs,toggle:toggleExercise,progress,completedCount,totalCount,isToday,dateKey,dow,updateExercise,addExercise,deleteExercise,resetPlan,customPlan}} />}
+      {view==="cardio" && <CardioView {...{selectedDate,setSelectedDate,isToday,todayCardio,todaySteps,addCardio,removeCardio,updateSteps,profile,stepBurn,cardioBurn,liftingBurn,totalBurn}} />}
+      {view==="food" && <FoodView {...{selectedDate,setSelectedDate,isToday,todayFood,totals:foodTotals,targets,totalBurn,netCalories,addFood,removeFood,setView,customFoods,addCustomFood,updateCustomFood,deleteCustomFood}} />}
+      {view==="calendar" && <CalendarView {...{calendarMonth,setCalendarMonth,today,dateKey,setSelectedDate,setView,logs,foodLogs,cardioLogs,plan}} />}
+      {view==="stats" && <StatsView {...{logs,foodLogs,cardioLogs,stepLogs,streak,today,targets,plan,profile,onReset:()=>{
+        if (confirm("Reset ALL data? Cannot be undone.")) {
+          setLogs({}); setFoodLogs({}); setCardioLogs({}); setStepLogs({});
+          saveData("workout-logs",{}); saveData("food-logs",{}); saveData("cardio-logs",{}); saveData("step-logs",{});
+        }
+      }}} />}
+      {view==="profile" && <ProfileView {...{profile,updateProfile,targets}} />}
+
+      {saving && <div style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",background:"#1a1a1a",border:"1px solid #333",padding:"6px 14px",borderRadius:99,fontSize:10,color:"#888",letterSpacing:2,zIndex:50}}>SAVING...</div>}
+    </div>
+  );
+}
+
+function DateNav({ selectedDate, setSelectedDate, isToday }) {
+  return (
+    <>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:8}}>
+        <button onClick={()=>{const d=new Date(selectedDate);d.setDate(d.getDate()-1);setSelectedDate(d);}} style={{background:"#161616",border:"1px solid #222",color:"#888",padding:"8px 14px",borderRadius:4,fontSize:14}}>‹</button>
+        <div style={{textAlign:"center",flex:1}}>
+          <div style={{fontSize:10,color:"#555",letterSpacing:3}}>{isToday?"TODAY":selectedDate.toLocaleDateString(undefined,{weekday:"long"}).toUpperCase()}</div>
+          <div style={{fontSize:13,color:"#aaa",marginTop:2}}>{monthNames[selectedDate.getMonth()]} {selectedDate.getDate()}, {selectedDate.getFullYear()}</div>
+        </div>
+        <button onClick={()=>{const d=new Date(selectedDate);d.setDate(d.getDate()+1);setSelectedDate(d);}} style={{background:"#161616",border:"1px solid #222",color:"#888",padding:"8px 14px",borderRadius:4,fontSize:14}}>›</button>
+      </div>
+      {!isToday && <button onClick={()=>setSelectedDate(new Date())} style={{width:"100%",padding:8,background:"transparent",border:"1px dashed #333",color:"#666",fontSize:10,letterSpacing:3,borderRadius:4,marginBottom:12}}>← BACK TO TODAY</button>}
+    </>
+  );
+}
+
+function ExerciseEditor({ exercise, color, onSave, onCancel, onDelete, isNew }) {
+  const [name, setName] = useState(exercise.name);
+  const [sets, setSets] = useState(exercise.sets);
+  const [reps, setReps] = useState(exercise.reps);
+  const [muscle, setMuscle] = useState(exercise.muscle);
+  const [note, setNote] = useState(exercise.note);
+  return (
+    <div>
+      <div style={{marginBottom:10}}>
+        <div style={{fontSize:9,color:"#555",letterSpacing:2,marginBottom:4}}>EXERCISE NAME</div>
+        <input value={name} onChange={(e)=>setName(e.target.value)} placeholder="e.g. Barbell Squat" />
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+        <div>
+          <div style={{fontSize:9,color:"#555",letterSpacing:2,marginBottom:4}}>SETS</div>
+          <input type="number" min="1" value={sets} onChange={(e)=>setSets(parseInt(e.target.value)||1)} />
+        </div>
+        <div>
+          <div style={{fontSize:9,color:"#555",letterSpacing:2,marginBottom:4}}>REPS</div>
+          <input value={reps} onChange={(e)=>setReps(e.target.value)} placeholder="8-10 or 12" />
+        </div>
+      </div>
+      <div style={{marginBottom:10}}>
+        <div style={{fontSize:9,color:"#555",letterSpacing:2,marginBottom:4}}>MUSCLE GROUP</div>
+        <input value={muscle} onChange={(e)=>setMuscle(e.target.value)} placeholder="e.g. Quads" />
+      </div>
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:9,color:"#555",letterSpacing:2,marginBottom:4}}>NOTE / FORM CUE</div>
+        <input value={note} onChange={(e)=>setNote(e.target.value)} placeholder="Form cue or technique" />
+      </div>
+      <div style={{display:"flex",gap:6}}>
+        <button onClick={onCancel} style={{flex:1,padding:10,background:"transparent",border:"1px solid #333",color:"#888",borderRadius:4,fontSize:10,letterSpacing:2}}>CANCEL</button>
+        {!isNew && onDelete && <button onClick={onDelete} style={{padding:"10px 14px",background:"transparent",border:"1px solid #331a1a",color:"#a44",borderRadius:4,fontSize:10,letterSpacing:2}}>DELETE</button>}
+        <button onClick={()=>{ if(name.trim()) onSave({name,sets,reps,muscle,note}); }} style={{flex:2,padding:10,background:color,color:"#000",border:"none",borderRadius:4,fontSize:10,letterSpacing:2,fontWeight:700}}>{isNew?"ADD":"SAVE"}</button>
+      </div>
+    </div>
+  );
+}
+
+function TrainView({ selectedDate, setSelectedDate, todayPlan, dayLogs, toggle, progress, completedCount, totalCount, isToday, dateKey, dow, updateExercise, addExercise, deleteExercise, resetPlan, customPlan }) {
+  const [editMode, setEditMode] = useState(false);
+  const [editingIdx, setEditingIdx] = useState(null);
+  const [adding, setAdding] = useState(false);
+  return (
+    <div className="fade-in" style={{maxWidth:720,margin:"0 auto",padding:"0 20px"}} key={dateKey}>
+      <DateNav selectedDate={selectedDate} setSelectedDate={setSelectedDate} isToday={isToday} />
+      <div style={{background:"#111",border:`1px solid ${todayPlan.color}33`,borderLeft:`3px solid ${todayPlan.color}`,borderRadius:8,padding:"16px 18px",marginBottom:12}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12}}>
+          <div>
+            <div style={{fontSize:10,color:todayPlan.color,letterSpacing:4,marginBottom:3}}>{todayPlan.tag}</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,letterSpacing:2,color:"#fff"}}>{todayPlan.day}</div>
+            <div style={{fontSize:11,color:"#888",marginTop:2}}>{todayPlan.label}</div>
+          </div>
+          {!todayPlan.isRest && <div style={{textAlign:"right"}}>
+            <div style={{fontSize:26,fontFamily:"'Bebas Neue',sans-serif",color:todayPlan.color,lineHeight:1}}>{progress}%</div>
+            <div style={{fontSize:9,color:"#555",letterSpacing:2}}>{completedCount}/{totalCount}</div>
+          </div>}
+        </div>
+        {!todayPlan.isRest && <div style={{marginTop:12,background:"#222",borderRadius:99,height:3,overflow:"hidden"}}>
+          <div style={{width:`${progress}%`,height:"100%",background:todayPlan.color,transition:"width 0.3s"}} />
+        </div>}
+      </div>
+      {todayPlan.isRest && <div style={{background:"#111",border:"1px solid #222",borderRadius:8,padding:"40px 20px",textAlign:"center"}}>
+        <div style={{fontSize:48,marginBottom:12}}>😴</div>
+        <div style={{fontSize:11,letterSpacing:4,color:"#666"}}>REST DAY</div>
+        <div style={{fontSize:12,color:"#555",marginTop:8}}>Sleep, eat, recover.</div>
+      </div>}
+      {!todayPlan.isRest && <>
+        <div style={{display:"flex",gap:6,marginBottom:10}}>
+          <button onClick={()=>{setEditMode(!editMode);setEditingIdx(null);}} style={{flex:1,padding:"8px 12px",background:editMode?todayPlan.color:"#1a1a1a",color:editMode?"#000":"#888",border:`1px solid ${editMode?todayPlan.color:"#222"}`,borderRadius:4,fontSize:10,letterSpacing:2,fontWeight:editMode?700:400}}>{editMode?"✓ DONE EDITING":"✎ EDIT WORKOUT"}</button>
+          {customPlan && <button onClick={()=>{if(confirm("Reset to default workout plan?")) resetPlan();}} style={{padding:"8px 12px",background:"transparent",border:"1px solid #331a1a",color:"#a44",borderRadius:4,fontSize:10,letterSpacing:2}}>RESET PLAN</button>}
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:5}}>
+          {todayPlan.exercises.map((ex,i)=>{
+            const done = !!dayLogs[i];
+            const isEditing = editingIdx === i;
+            return <div key={i} style={{background:"#111",border:`1px solid ${done?todayPlan.color+"55":isEditing?"#444":"#1e1e1e"}`,borderRadius:6,padding:"12px 14px",opacity:done&&!editMode?0.5:1,transition:"all 0.2s"}}>
+              {!isEditing && <div className="ex-row" onClick={()=>editMode?setEditingIdx(i):toggle(i)} style={{display:"flex",alignItems:"flex-start",gap:12}}>
+                {!editMode && <div style={{width:22,height:22,borderRadius:4,flexShrink:0,marginTop:1,background:done?todayPlan.color:"transparent",border:`2px solid ${done?todayPlan.color:"#333"}`,display:"flex",alignItems:"center",justifyContent:"center"}}>{done && <span style={{color:"#000",fontWeight:700,fontSize:13}}>✓</span>}</div>}
+                {editMode && <div style={{width:22,height:22,borderRadius:4,flexShrink:0,marginTop:1,background:"#1a1a1a",border:"1px solid #333",display:"flex",alignItems:"center",justifyContent:"center",color:"#888",fontSize:12}}>✎</div>}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:500,color:done&&!editMode?"#555":"#ddd",marginBottom:3}}>{ex.name}</div>
+                  <div style={{display:"flex",gap:12,fontSize:10,color:"#666",marginBottom:3,flexWrap:"wrap"}}>
+                    <span><span style={{color:todayPlan.color}}>{ex.sets}</span> SETS</span>
+                    <span><span style={{color:todayPlan.color}}>{ex.reps}</span> REPS</span>
+                    <span style={{color:"#444"}}>· {ex.muscle}</span>
+                  </div>
+                  <div style={{fontSize:10,color:"#444",fontStyle:"italic"}}>↳ {ex.note}</div>
+                </div>
+              </div>}
+              {isEditing && <ExerciseEditor exercise={ex} color={todayPlan.color} onSave={(updates)=>{updateExercise(dow,i,updates);setEditingIdx(null);}} onCancel={()=>setEditingIdx(null)} onDelete={()=>{if(confirm(`Delete "${ex.name}"?`)){deleteExercise(dow,i);setEditingIdx(null);}}} />}
+            </div>;
+          })}
+        </div>
+        {editMode && !adding && <button onClick={()=>setAdding(true)} style={{width:"100%",marginTop:8,padding:12,background:"transparent",border:`1px dashed ${todayPlan.color}55`,color:todayPlan.color,borderRadius:6,fontSize:11,letterSpacing:2,fontWeight:700}}>+ ADD EXERCISE</button>}
+        {adding && <div style={{marginTop:8,background:"#111",border:`1px solid ${todayPlan.color}55`,borderRadius:6,padding:14}}>
+          <ExerciseEditor exercise={{name:"",sets:3,reps:"10",muscle:"",note:""}} color={todayPlan.color} onSave={(updates)=>{addExercise(dow,updates);setAdding(false);}} onCancel={()=>setAdding(false)} isNew />
+        </div>}
+      </>}
+    </div>
+  );
+}
+
+function CardioView({ selectedDate, setSelectedDate, isToday, todayCardio, todaySteps, addCardio, removeCardio, updateSteps, profile, stepBurn, cardioBurn, liftingBurn, totalBurn }) {
+  const [pickedType, setPickedType] = useState(null);
+  const [duration, setDuration] = useState(30);
+  const [speed, setSpeed] = useState(0);
+  const [incline, setIncline] = useState(0);
+  const [stepInput, setStepInput] = useState(todaySteps);
+  useEffect(()=>setStepInput(todaySteps),[todaySteps]);
+  const stepGoal = profile.stepGoal || 10000;
+  const stepProgress = Math.min(100, Math.round((todaySteps/stepGoal)*100));
+  const startCardio = (type) => { setPickedType(type); setDuration(30); setSpeed(type.defaultSpeed||0); setIncline(type.defaultIncline||0); };
+  const saveCardio = () => {
+    if (!pickedType) return;
+    const kcal = calcCardioCalories(pickedType.met, duration, profile.weight, incline);
+    addCardio({ type:pickedType.id, name:pickedType.name, icon:pickedType.icon, duration, speed, incline, kcal });
+    setPickedType(null);
+  };
+  return (
+    <div className="fade-in" style={{maxWidth:720,margin:"0 auto",padding:"0 20px"}}>
+      <DateNav selectedDate={selectedDate} setSelectedDate={setSelectedDate} isToday={isToday} />
+      <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:8,padding:16,marginBottom:12}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:12}}>
+          <div>
+            <div style={{fontSize:9,color:"#555",letterSpacing:3}}>BURNED TODAY</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:38,color:"#FF6B35",lineHeight:1,marginTop:2}}>🔥 {totalBurn}<span style={{fontSize:14,color:"#666"}}> kcal</span></div>
+          </div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,fontSize:10}}>
+          <div style={{background:"#0a0a0a",borderRadius:4,padding:8}}>
+            <div style={{color:"#555",letterSpacing:2,fontSize:8}}>LIFTING</div>
+            <div style={{color:"#FF6B35",fontSize:16,fontFamily:"'Bebas Neue',sans-serif",lineHeight:1,marginTop:4}}>{liftingBurn}</div>
+          </div>
+          <div style={{background:"#0a0a0a",borderRadius:4,padding:8}}>
+            <div style={{color:"#555",letterSpacing:2,fontSize:8}}>CARDIO</div>
+            <div style={{color:"#4ECDC4",fontSize:16,fontFamily:"'Bebas Neue',sans-serif",lineHeight:1,marginTop:4}}>{cardioBurn}</div>
+          </div>
+          <div style={{background:"#0a0a0a",borderRadius:4,padding:8}}>
+            <div style={{color:"#555",letterSpacing:2,fontSize:8}}>STEPS</div>
+            <div style={{color:"#A78BFA",fontSize:16,fontFamily:"'Bebas Neue',sans-serif",lineHeight:1,marginTop:4}}>{stepBurn}</div>
+          </div>
+        </div>
+      </div>
+      <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:8,padding:16,marginBottom:12}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+          <div>
+            <div style={{fontSize:9,color:"#555",letterSpacing:3}}>STEPS</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:30,color:"#A78BFA",lineHeight:1,marginTop:4}}>👟 {todaySteps.toLocaleString()}</div>
+            <div style={{fontSize:10,color:"#666",marginTop:2}}>goal: {stepGoal.toLocaleString()}</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:22,color:"#A78BFA",fontFamily:"'Bebas Neue',sans-serif",lineHeight:1}}>{stepProgress}%</div>
+            <div style={{fontSize:9,color:"#555",letterSpacing:2}}>~{stepBurn} kcal</div>
+          </div>
+        </div>
+        <div style={{background:"#222",borderRadius:99,height:3,overflow:"hidden",marginBottom:12}}>
+          <div style={{width:`${stepProgress}%`,height:"100%",background:"#A78BFA",transition:"width 0.3s"}} />
+        </div>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <input type="number" min="0" value={stepInput} onChange={(e)=>setStepInput(parseInt(e.target.value)||0)} placeholder="Enter steps..." style={{flex:1}} />
+          <button onClick={()=>updateSteps(stepInput)} style={{padding:"10px 16px",background:"#A78BFA",color:"#000",border:"none",borderRadius:4,fontSize:10,letterSpacing:2,fontWeight:700}}>SAVE</button>
+        </div>
+        <div style={{display:"flex",gap:4,marginTop:8}}>
+          {[1000,2500,5000].map(n=>(
+            <button key={n} onClick={()=>{const v=todaySteps+n;setStepInput(v);updateSteps(v);}} style={{flex:1,padding:6,background:"#1a1a1a",color:"#888",border:"1px solid #2a2a2a",borderRadius:4,fontSize:10}}>+{n.toLocaleString()}</button>
+          ))}
+        </div>
+      </div>
+      {todayCardio.length>0 && <div style={{marginBottom:12}}>
+        <div style={{fontSize:10,color:"#555",letterSpacing:3,padding:"0 4px 8px"}}>CARDIO TODAY</div>
+        <div style={{display:"flex",flexDirection:"column",gap:4}}>
+          {todayCardio.map(entry=>(
+            <div key={entry.id} className="food-row" style={{background:"#111",border:"1px solid #1a1a1a",borderRadius:6,padding:"10px 12px",display:"flex",alignItems:"center",gap:10}}>
+              <div style={{fontSize:22}}>{entry.icon}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12,color:"#ddd"}}>{entry.name}</div>
+                <div style={{fontSize:10,color:"#666",marginTop:2}}>{entry.duration} min{entry.speed>0&&` · ${entry.speed} km/h`}{entry.incline>0&&` · ${entry.incline}% incline`}<span style={{color:"#FF6B35"}}> · {entry.kcal} kcal</span></div>
+              </div>
+              <button onClick={()=>removeCardio(entry.id)} style={{background:"transparent",border:"1px solid #331a1a",color:"#a44",padding:"4px 8px",borderRadius:4,fontSize:10}}>✕</button>
+            </div>
+          ))}
+        </div>
+      </div>}
+      <div style={{fontSize:10,color:"#555",letterSpacing:3,marginBottom:8}}>+ ADD CARDIO</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:12}}>
+        {cardioTypes.map(type=>(
+          <button key={type.id} onClick={()=>startCardio(type)} style={{background:"#111",border:"1px solid #1a1a1a",borderRadius:6,padding:"12px 10px",textAlign:"left",color:"#ccc",display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:22}}>{type.icon}</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:11,color:"#ddd"}}>{type.name}</div>
+              <div style={{fontSize:9,color:"#666"}}>{type.met} MET</div>
+            </div>
+          </button>
+        ))}
+      </div>
+      {pickedType && <div onClick={()=>setPickedType(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+        <div onClick={(e)=>e.stopPropagation()} style={{background:"#111",border:"1px solid #333",borderRadius:8,padding:20,maxWidth:380,width:"100%"}}>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+            <div style={{fontSize:32}}>{pickedType.icon}</div>
+            <div>
+              <div style={{fontSize:9,color:"#555",letterSpacing:3}}>LOG CARDIO</div>
+              <div style={{fontSize:16,color:"#fff"}}>{pickedType.name}</div>
+            </div>
+          </div>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:10,color:"#666",letterSpacing:2,marginBottom:5}}>DURATION (min)</div>
+            <div style={{display:"flex",gap:4,marginBottom:6,flexWrap:"wrap"}}>
+              {[10,20,30,45,60].map(m=>(
+                <button key={m} onClick={()=>setDuration(m)} style={{flex:"1 1 50px",padding:8,background:duration===m?"#FF6B35":"#1a1a1a",color:duration===m?"#000":"#888",border:"none",borderRadius:4,fontSize:12,fontWeight:duration===m?700:400}}>{m}m</button>
+              ))}
+            </div>
+            <input type="number" min="1" value={duration} onChange={(e)=>setDuration(parseInt(e.target.value)||1)} />
+          </div>
+          {pickedType.hasSpeed && <div style={{marginBottom:12}}>
+            <div style={{fontSize:10,color:"#666",letterSpacing:2,marginBottom:5}}>SPEED (km/h)</div>
+            <input type="number" step="0.5" min="0" value={speed} onChange={(e)=>setSpeed(parseFloat(e.target.value)||0)} />
+          </div>}
+          {pickedType.hasIncline && <div style={{marginBottom:12}}>
+            <div style={{fontSize:10,color:"#666",letterSpacing:2,marginBottom:5}}>INCLINE (%)</div>
+            <div style={{display:"flex",gap:4,marginBottom:6,flexWrap:"wrap"}}>
+              {[0,5,10,12,15].map(n=>(
+                <button key={n} onClick={()=>setIncline(n)} style={{flex:"1 1 50px",padding:8,background:incline===n?"#FF6B35":"#1a1a1a",color:incline===n?"#000":"#888",border:"none",borderRadius:4,fontSize:12,fontWeight:incline===n?700:400}}>{n}%</button>
+              ))}
+            </div>
+            <input type="number" step="0.5" min="0" max="30" value={incline} onChange={(e)=>setIncline(parseFloat(e.target.value)||0)} />
+          </div>}
+          <div style={{background:"#0a0a0a",borderRadius:4,padding:12,marginBottom:14,textAlign:"center"}}>
+            <div style={{fontSize:9,color:"#555",letterSpacing:2}}>EST. CALORIES BURNED</div>
+            <div style={{fontSize:32,color:"#FF6B35",fontFamily:"'Bebas Neue',sans-serif",lineHeight:1,marginTop:4}}>🔥 {calcCardioCalories(pickedType.met,duration,profile.weight,incline)}</div>
+            {!profile.weight && <div style={{fontSize:9,color:"#a44",marginTop:6}}>Set your weight in profile for accuracy</div>}
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>setPickedType(null)} style={{flex:1,padding:12,background:"transparent",border:"1px solid #333",color:"#888",borderRadius:4,fontSize:11,letterSpacing:2}}>CANCEL</button>
+            <button onClick={saveCardio} style={{flex:2,padding:12,background:"#FF6B35",color:"#000",border:"none",borderRadius:4,fontSize:11,letterSpacing:2,fontWeight:700}}>LOG IT</button>
+          </div>
+        </div>
+      </div>}
+    </div>
+  );
+}
+
+function MacroBar({ label, value, target, color, unit, inverse }) {
+  const pct = target ? Math.min(100, (value/target)*100) : 0;
+  const over = target && value > target;
+  return (
+    <div style={{background:"#0a0a0a",border:"1px solid #1a1a1a",borderRadius:4,padding:8}}>
+      <div style={{fontSize:8,color:"#555",letterSpacing:2}}>{label}</div>
+      <div style={{fontSize:14,color:"#ddd",fontFamily:"'Bebas Neue',sans-serif",lineHeight:1,marginTop:4}}>{value.toFixed(0)}{unit}{target&&<span style={{fontSize:9,color:"#666"}}>/{target}</span>}</div>
+      <div style={{marginTop:6,background:"#222",height:2,borderRadius:99,overflow:"hidden"}}>
+        <div style={{width:`${pct}%`,height:"100%",background:inverse&&over?"#FF6B6B":color,transition:"width 0.3s"}} />
+      </div>
+    </div>
+  );
+}
+
+function FoodView({ selectedDate, setSelectedDate, isToday, todayFood, totals, targets, totalBurn, netCalories, addFood, removeFood, setView, customFoods, addCustomFood, updateCustomFood, deleteCustomFood }) {
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("All");
+  const [pickedFood, setPickedFood] = useState(null);
+  const [multiplier, setMultiplier] = useState(1);
+  const [editingFood, setEditingFood] = useState(null);
+  const [creatingFood, setCreatingFood] = useState(false);
+  const categories = ["All","My Foods","Protein","Carbs","Fruit","Veg","Fats","Other"];
+  const filtered = useMemo(()=>{
+    // Custom foods first, then built-in
+    let list = [...customFoods, ...foodDB];
+    if (category === "My Foods") list = list.filter(f=>f.custom);
+    else if (category !== "All") list = list.filter(f=>f.cat===category);
+    if (search) list = list.filter(f=>f.name.toLowerCase().includes(search.toLowerCase()));
+    return list;
+  },[search,category,customFoods]);
+  return (
+    <div className="fade-in" style={{maxWidth:720,margin:"0 auto",padding:"0 20px"}}>
+      <DateNav selectedDate={selectedDate} setSelectedDate={setSelectedDate} isToday={isToday} />
+      <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:8,padding:16,marginBottom:12}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+          <div>
+            <div style={{fontSize:9,color:"#555",letterSpacing:3}}>EATEN</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,color:"#fff",lineHeight:1,marginTop:2}}>🍽 {totals.kcal}</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:9,color:"#555",letterSpacing:3}}>BURNED</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,color:"#FF6B35",lineHeight:1,marginTop:2}}>🔥 {totalBurn}</div>
+          </div>
+        </div>
+        <div style={{background:"#0a0a0a",borderRadius:4,padding:10,marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+            <div>
+              <div style={{fontSize:9,color:"#555",letterSpacing:2}}>NET</div>
+              <div style={{fontSize:22,color:netCalories<=(targets?.kcal||99999)?"#4ECDC4":"#FF6B6B",fontFamily:"'Bebas Neue',sans-serif",lineHeight:1,marginTop:4}}>{netCalories} kcal</div>
+            </div>
+            {targets && <div style={{textAlign:"right"}}>
+              <div style={{fontSize:9,color:"#555",letterSpacing:2}}>TARGET</div>
+              <div style={{fontSize:16,color:"#888"}}>{targets.kcal}</div>
+              <div style={{fontSize:10,color:(targets.kcal-netCalories)>=0?"#4ECDC4":"#FF6B6B"}}>{(targets.kcal-netCalories)>=0?"+":""}{targets.kcal-netCalories} left</div>
+            </div>}
+          </div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+          <MacroBar label="PROTEIN" value={totals.p} target={targets?.p} color="#FF6B35" unit="g" />
+          <MacroBar label="CARBS" value={totals.c} target={targets?.c} color="#FFE66D" unit="g" />
+          <MacroBar label="FAT" value={totals.f} target={targets?.f} color="#A78BFA" unit="g" />
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:8}}>
+          <MacroBar label="FIBER" value={totals.fb} target={targets?.fb||30} color="#34D399" unit="g" />
+          <MacroBar label="SUGAR" value={totals.s} target={50} color="#F472B6" unit="g" inverse />
+        </div>
+        {!targets && <button onClick={()=>setView("profile")} style={{width:"100%",marginTop:12,padding:10,background:"#FF6B35",color:"#000",border:"none",borderRadius:4,fontSize:10,letterSpacing:3,fontWeight:700}}>SET YOUR GOALS →</button>}
+      </div>
+      {todayFood.length>0 && <div style={{marginBottom:14}}>
+        <div style={{fontSize:10,color:"#555",letterSpacing:3,padding:"0 4px 8px"}}>LOGGED TODAY</div>
+        <div style={{display:"flex",flexDirection:"column",gap:4}}>
+          {todayFood.map(entry=>(
+            <div key={entry.id} className="food-row" style={{background:"#111",border:"1px solid #1a1a1a",borderRadius:6,padding:"10px 12px",display:"flex",alignItems:"center",gap:10}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12,color:"#ddd"}}>{entry.name} {entry.multiplier!==1 && <span style={{color:"#666"}}>×{entry.multiplier}</span>}</div>
+                <div style={{fontSize:9,color:"#666",marginTop:2}}>{entry.serving} · {entry.kcal} kcal · P{entry.p} C{entry.c} F{entry.f}</div>
+              </div>
+              <button onClick={()=>removeFood(entry.id)} style={{background:"transparent",border:"1px solid #331a1a",color:"#a44",padding:"4px 8px",borderRadius:4,fontSize:10}}>✕</button>
+            </div>
+          ))}
+        </div>
+      </div>}
+      <div style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:8,padding:12,marginBottom:12}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+          <div style={{fontSize:10,color:"#555",letterSpacing:3}}>+ ADD FOOD</div>
+          <button onClick={()=>setCreatingFood(true)} style={{background:"#34D399",color:"#000",border:"none",borderRadius:4,padding:"5px 10px",fontSize:9,letterSpacing:2,fontWeight:700}}>+ CREATE CUSTOM</button>
+        </div>
+        <input type="text" placeholder="Search foods..." value={search} onChange={(e)=>setSearch(e.target.value)} style={{marginBottom:8}} />
+        <div style={{display:"flex",gap:4,overflowX:"auto",marginBottom:10,paddingBottom:4}}>
+          {categories.map(c=>(
+            <button key={c} onClick={()=>setCategory(c)} style={{padding:"5px 10px",flexShrink:0,background:category===c?(c==="My Foods"?"#34D399":"#FF6B35"):"#1a1a1a",color:category===c?"#000":"#888",border:"none",borderRadius:99,fontSize:9,letterSpacing:2,fontWeight:category===c?700:400}}>{c.toUpperCase()}</button>
+          ))}
+        </div>
+        <div style={{maxHeight:340,overflowY:"auto",display:"flex",flexDirection:"column",gap:3}}>
+          {filtered.length===0 && <div style={{fontSize:11,color:"#555",textAlign:"center",padding:20}}>{category==="My Foods"?"No custom foods yet. Tap + CREATE CUSTOM to add your own.":"No foods match."}</div>}
+          {filtered.map((food,i)=>(
+            <div key={food.id||i} style={{background:"#111",border:`1px solid ${food.custom?"#34D39955":"#1a1a1a"}`,borderRadius:4,display:"flex",alignItems:"center",gap:0}}>
+              <button onClick={()=>{setPickedFood(food);setMultiplier(1);}} style={{flex:1,background:"transparent",border:"none",padding:"9px 11px",textAlign:"left",color:"#ccc",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,minWidth:0}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,color:"#ddd"}}>{food.name}{food.custom && <span style={{fontSize:8,color:"#34D399",marginLeft:6,letterSpacing:1}}>★ CUSTOM</span>}</div>
+                  <div style={{fontSize:9,color:"#666",marginTop:1}}>{food.serving} · {food.kcal} kcal · P{food.p} C{food.c} F{food.f}</div>
+                </div>
+                <span style={{color:"#FF6B35",fontSize:16,flexShrink:0}}>+</span>
+              </button>
+              {food.custom && <button onClick={()=>setEditingFood(food)} style={{background:"transparent",border:"none",borderLeft:"1px solid #1a1a1a",color:"#666",padding:"9px 12px",fontSize:13}}>✎</button>}
+            </div>
+          ))}
+        </div>
+      </div>
+      {pickedFood && <div onClick={()=>setPickedFood(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+        <div onClick={(e)=>e.stopPropagation()} style={{background:"#111",border:"1px solid #333",borderRadius:8,padding:20,maxWidth:360,width:"100%"}}>
+          <div style={{fontSize:10,color:"#555",letterSpacing:3,marginBottom:6}}>ADD FOOD</div>
+          <div style={{fontSize:16,color:"#fff",marginBottom:4}}>{pickedFood.name}</div>
+          <div style={{fontSize:11,color:"#888",marginBottom:16}}>1 serving = {pickedFood.serving}</div>
+          <div style={{fontSize:10,color:"#666",letterSpacing:2,marginBottom:6}}>SERVINGS</div>
+          <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
+            {[0.5,1,1.5,2,3].map(m=>(
+              <button key={m} onClick={()=>setMultiplier(m)} style={{flex:"1 1 50px",padding:10,background:multiplier===m?"#FF6B35":"#1a1a1a",color:multiplier===m?"#000":"#888",border:"none",borderRadius:4,fontSize:12,fontWeight:multiplier===m?700:400}}>{m}×</button>
+            ))}
+          </div>
+          <input type="number" step="0.25" min="0.25" value={multiplier} onChange={(e)=>setMultiplier(parseFloat(e.target.value)||1)} style={{marginBottom:14}} />
+          <div style={{background:"#0a0a0a",borderRadius:4,padding:10,marginBottom:14}}>
+            <div style={{fontSize:9,color:"#555",letterSpacing:2,marginBottom:4}}>TOTAL</div>
+            <div style={{fontSize:20,color:"#FF6B35",fontFamily:"'Bebas Neue',sans-serif"}}>{Math.round(pickedFood.kcal*multiplier)} kcal</div>
+            <div style={{fontSize:10,color:"#888"}}>P{(pickedFood.p*multiplier).toFixed(1)}g · C{(pickedFood.c*multiplier).toFixed(1)}g · F{(pickedFood.f*multiplier).toFixed(1)}g</div>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>setPickedFood(null)} style={{flex:1,padding:12,background:"transparent",border:"1px solid #333",color:"#888",borderRadius:4,fontSize:11,letterSpacing:2}}>CANCEL</button>
+            <button onClick={()=>{addFood(pickedFood,multiplier);setPickedFood(null);}} style={{flex:2,padding:12,background:"#FF6B35",color:"#000",border:"none",borderRadius:4,fontSize:11,letterSpacing:2,fontWeight:700}}>ADD TO LOG</button>
+          </div>
+        </div>
+      </div>}
+      {(creatingFood || editingFood) && <CustomFoodEditor
+        food={editingFood}
+        onSave={(f)=>{
+          if (editingFood) updateCustomFood(editingFood.id, f);
+          else addCustomFood(f);
+          setCreatingFood(false); setEditingFood(null);
+        }}
+        onCancel={()=>{setCreatingFood(false); setEditingFood(null);}}
+        onDelete={editingFood ? ()=>{
+          if (confirm(`Delete "${editingFood.name}"?`)) {
+            deleteCustomFood(editingFood.id); setEditingFood(null);
+          }
+        } : null}
+      />}
+    </div>
+  );
+}
+
+function CustomFoodEditor({ food, onSave, onCancel, onDelete }) {
+  const [name, setName] = useState(food?.name || "");
+  const [serving, setServing] = useState(food?.serving || "100g");
+  const [kcal, setKcal] = useState(food?.kcal || "");
+  const [p, setP] = useState(food?.p || "");
+  const [c, setC] = useState(food?.c || "");
+  const [f_, setF] = useState(food?.f || "");
+  const [fb, setFb] = useState(food?.fb || "");
+  const [s, setS] = useState(food?.s || "");
+  const [cat, setCat] = useState(food?.cat || "Other");
+  const cats = ["Protein","Carbs","Fruit","Veg","Fats","Other"];
+
+  const save = () => {
+    if (!name.trim()) { alert("Enter a name"); return; }
+    const k = parseFloat(kcal);
+    if (!k || k < 0) { alert("Enter valid calories"); return; }
+    onSave({
+      name: name.trim(), serving: serving.trim() || "1 serving",
+      kcal: k,
+      p: parseFloat(p) || 0, c: parseFloat(c) || 0, f: parseFloat(f_) || 0,
+      fb: parseFloat(fb) || 0, s: parseFloat(s) || 0, cat,
+    });
+  };
+
+  return (
+    <div onClick={onCancel} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:101,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+      <div onClick={(e)=>e.stopPropagation()} style={{background:"#111",border:"1px solid #333",borderTopLeftRadius:16,borderTopRightRadius:16,padding:20,maxWidth:520,width:"100%",maxHeight:"92vh",overflowY:"auto"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <div style={{fontSize:10,color:"#555",letterSpacing:3}}>{food?"EDIT CUSTOM FOOD":"NEW CUSTOM FOOD"}</div>
+          <button onClick={onCancel} style={{background:"transparent",border:"none",color:"#666",fontSize:22}}>✕</button>
+        </div>
+
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:9,color:"#555",letterSpacing:2,marginBottom:5}}>FOOD NAME</div>
+          <input value={name} onChange={(e)=>setName(e.target.value)} placeholder="e.g. Mom's Biryani" autoFocus />
+        </div>
+
+        <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:8,marginBottom:12}}>
+          <div>
+            <div style={{fontSize:9,color:"#555",letterSpacing:2,marginBottom:5}}>SERVING SIZE</div>
+            <input value={serving} onChange={(e)=>setServing(e.target.value)} placeholder="100g or 1 cup" />
+          </div>
+          <div>
+            <div style={{fontSize:9,color:"#555",letterSpacing:2,marginBottom:5}}>CALORIES</div>
+            <input type="number" min="0" value={kcal} onChange={(e)=>setKcal(e.target.value)} placeholder="200" />
+          </div>
+        </div>
+
+        <div style={{fontSize:9,color:"#555",letterSpacing:2,marginBottom:5}}>NUTRITION (PER SERVING, IN GRAMS)</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:8}}>
+          <div>
+            <div style={{fontSize:8,color:"#FF6B35",letterSpacing:2,marginBottom:3}}>PROTEIN</div>
+            <input type="number" step="0.1" min="0" value={p} onChange={(e)=>setP(e.target.value)} placeholder="0" />
+          </div>
+          <div>
+            <div style={{fontSize:8,color:"#FFE66D",letterSpacing:2,marginBottom:3}}>CARBS</div>
+            <input type="number" step="0.1" min="0" value={c} onChange={(e)=>setC(e.target.value)} placeholder="0" />
+          </div>
+          <div>
+            <div style={{fontSize:8,color:"#A78BFA",letterSpacing:2,marginBottom:3}}>FAT</div>
+            <input type="number" step="0.1" min="0" value={f_} onChange={(e)=>setF(e.target.value)} placeholder="0" />
+          </div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:12}}>
+          <div>
+            <div style={{fontSize:8,color:"#34D399",letterSpacing:2,marginBottom:3}}>FIBER</div>
+            <input type="number" step="0.1" min="0" value={fb} onChange={(e)=>setFb(e.target.value)} placeholder="0" />
+          </div>
+          <div>
+            <div style={{fontSize:8,color:"#F472B6",letterSpacing:2,marginBottom:3}}>SUGAR</div>
+            <input type="number" step="0.1" min="0" value={s} onChange={(e)=>setS(e.target.value)} placeholder="0" />
+          </div>
+        </div>
+
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:9,color:"#555",letterSpacing:2,marginBottom:5}}>CATEGORY</div>
+          <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+            {cats.map(x=>(
+              <button key={x} onClick={()=>setCat(x)} style={{flex:"1 1 70px",padding:8,background:cat===x?"#FF6B35":"#1a1a1a",color:cat===x?"#000":"#888",border:"none",borderRadius:4,fontSize:10,letterSpacing:1,fontWeight:cat===x?700:400}}>{x}</button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{background:"#0a0a0a",borderRadius:4,padding:10,marginBottom:14,fontSize:10,color:"#666",lineHeight:1.5}}>
+          💡 Tip: Check nutrition labels or sites like nutritionvalue.org. Macros are per 1 serving — when logging, you'll pick how many servings you ate.
+        </div>
+
+        <div style={{display:"flex",gap:6}}>
+          <button onClick={onCancel} style={{flex:1,padding:12,background:"transparent",border:"1px solid #333",color:"#888",borderRadius:4,fontSize:11,letterSpacing:2}}>CANCEL</button>
+          {onDelete && <button onClick={onDelete} style={{padding:"12px 14px",background:"transparent",border:"1px solid #331a1a",color:"#a44",borderRadius:4,fontSize:11,letterSpacing:2}}>DELETE</button>}
+          <button onClick={save} style={{flex:2,padding:12,background:"#34D399",color:"#000",border:"none",borderRadius:4,fontSize:11,letterSpacing:2,fontWeight:700}}>{food?"SAVE":"ADD"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CalendarView({ calendarMonth, setCalendarMonth, today, dateKey, setSelectedDate, setView, logs, foodLogs, cardioLogs, plan }) {
+  const buildCalendar = () => {
+    const year = calendarMonth.getFullYear();
+    const month = calendarMonth.getMonth();
+    const firstDay = new Date(year,month,1).getDay();
+    const daysInMonth = new Date(year,month+1,0).getDate();
+    const cells = [];
+    for (let i=0; i<firstDay; i++) cells.push(null);
+    for (let d=1; d<=daysInMonth; d++) cells.push(new Date(year,month,d));
+    return cells;
+  };
+  const getDayStatus = (date) => {
+    if (!date) return {};
+    const key = fmtDate(date);
+    const dLogs = logs[key];
+    const dFood = foodLogs[key];
+    const dCardio = cardioLogs[key];
+    const dayPlan = plan[date.getDay()];
+    let workout = null;
+    if (dLogs && !dayPlan.isRest) {
+      const total = dayPlan.exercises.length;
+      const done = dayPlan.exercises.filter((_,i)=>dLogs[i]).length;
+      if (done > 0) workout = done===total ? "full" : "partial";
+    }
+    return { workout, food: dFood && dFood.length>0, cardio: dCardio && dCardio.length>0 };
+  };
+  return (
+    <div className="fade-in" style={{maxWidth:720,margin:"0 auto",padding:"0 20px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <button onClick={()=>{const d=new Date(calendarMonth);d.setMonth(d.getMonth()-1);setCalendarMonth(d);}} style={{background:"#161616",border:"1px solid #222",color:"#888",padding:"8px 14px",borderRadius:4}}>‹</button>
+        <div style={{textAlign:"center"}}>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,letterSpacing:3,color:"#fff"}}>{monthNames[calendarMonth.getMonth()].toUpperCase()}</div>
+          <div style={{fontSize:10,color:"#555",letterSpacing:3}}>{calendarMonth.getFullYear()}</div>
+        </div>
+        <button onClick={()=>{const d=new Date(calendarMonth);d.setMonth(d.getMonth()+1);setCalendarMonth(d);}} style={{background:"#161616",border:"1px solid #222",color:"#888",padding:"8px 14px",borderRadius:4}}>›</button>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:6}}>
+        {dayShort.map((d,i)=>(<div key={i} style={{textAlign:"center",fontSize:10,color:"#555",letterSpacing:2}}>{d}</div>))}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
+        {buildCalendar().map((date,i)=>{
+          if (!date) return <div key={i} />;
+          const dayPlan = plan[date.getDay()];
+          const { workout, food, cardio } = getDayStatus(date);
+          const isCurrentDay = fmtDate(date) === fmtDate(today);
+          const isSelected = fmtDate(date) === dateKey;
+          return <button key={i} onClick={()=>{setSelectedDate(date);setView("today");}} style={{aspectRatio:"1",background:isSelected?"#1a1a1a":"#111",border:`1px solid ${isCurrentDay?"#fff":isSelected?"#444":"#1a1a1a"}`,borderRadius:4,color:"#888",padding:4,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+            <div style={{fontSize:13,color:isCurrentDay?"#fff":"#aaa",fontWeight:isCurrentDay?600:400}}>{date.getDate()}</div>
+            <div style={{display:"flex",gap:2,marginTop:3}}>
+              {!dayPlan.isRest && <div style={{width:4,height:4,borderRadius:"50%",background:workout==="full"?dayPlan.color:workout==="partial"?dayPlan.color+"55":"#222"}} />}
+              <div style={{width:4,height:4,borderRadius:"50%",background:cardio?"#FF6B35":"#222"}} />
+              <div style={{width:4,height:4,borderRadius:"50%",background:food?"#4ECDC4":"#222"}} />
+            </div>
+          </button>;
+        })}
+      </div>
+      <div style={{marginTop:16,padding:12,background:"#111",border:"1px solid #1a1a1a",borderRadius:6,fontSize:10,color:"#666"}}>
+        <div style={{display:"flex",gap:14,alignItems:"center",flexWrap:"wrap"}}>
+          <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:6,height:6,background:"#A78BFA",borderRadius:"50%"}} /> Lift</span>
+          <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:6,height:6,background:"#FF6B35",borderRadius:"50%"}} /> Cardio</span>
+          <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:6,height:6,background:"#4ECDC4",borderRadius:"50%"}} /> Food</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, sub, color }) {
+  return (
+    <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:6,padding:14}}>
+      <div style={{fontSize:9,color:"#555",letterSpacing:3}}>{label}</div>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,color,lineHeight:1,marginTop:4}}>{value}</div>
+      <div style={{fontSize:10,color:"#666",marginTop:4}}>{sub}</div>
+    </div>
+  );
+}
+
+function StatsView({ logs, foodLogs, cardioLogs, stepLogs, streak, today, targets, plan, profile, onReset }) {
+  const allLogDates = Object.keys(logs);
+  const completedWorkouts = allLogDates.filter(k=>{
+    const date = new Date(k+"T00:00:00");
+    const dp = plan[date.getDay()];
+    if (dp.isRest) return false;
+    const dl = logs[k];
+    return dp.exercises.every((_,i)=>dl[i]);
+  }).length;
+  const totalSetsCompleted = allLogDates.reduce((sum,k)=>{
+    const date = new Date(k+"T00:00:00");
+    const dp = plan[date.getDay()];
+    const dl = logs[k] || {};
+    return sum + dp.exercises.reduce((s,ex,i)=>s+(dl[i]?ex.sets:0),0);
+  },0);
+  const totalCardioMin = Object.values(cardioLogs).flat().reduce((s,e)=>s+e.duration,0);
+  const totalCardioBurn = Object.values(cardioLogs).flat().reduce((s,e)=>s+e.kcal,0);
+  const totalSteps = Object.values(stepLogs).reduce((s,n)=>s+n,0);
+  const last7Days = Array.from({length:7}).map((_,i)=>{const d=new Date(today);d.setDate(d.getDate()-i);return fmtDate(d);});
+  const last7Cals = last7Days.map(k=>(foodLogs[k]||[]).reduce((s,e)=>s+e.kcal,0));
+  const avgCals = Math.round(last7Cals.reduce((a,b)=>a+b,0)/7);
+  const daysLogged = last7Cals.filter(c=>c>0).length;
+  const last7Steps = last7Days.map(k=>stepLogs[k]||0);
+  const avgSteps = Math.round(last7Steps.reduce((a,b)=>a+b,0)/7);
+  return (
+    <div className="fade-in" style={{maxWidth:720,margin:"0 auto",padding:"0 20px"}}>
+      <div style={{fontSize:10,color:"#555",letterSpacing:3,marginBottom:8}}>TRAINING</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+        <StatCard label="STREAK" value={streak} sub="days in a row" color="#FF6B35" />
+        <StatCard label="WORKOUTS" value={completedWorkouts} sub="fully done" color="#4ECDC4" />
+        <StatCard label="TOTAL SETS" value={totalSetsCompleted} sub="all time" color="#FFE66D" />
+        <StatCard label="ACTIVE DAYS" value={allLogDates.length} sub="days logged" color="#A78BFA" />
+      </div>
+      <div style={{fontSize:10,color:"#555",letterSpacing:3,marginBottom:8}}>CARDIO & STEPS</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+        <StatCard label="CARDIO MIN" value={totalCardioMin} sub="all time" color="#34D399" />
+        <StatCard label="KCAL BURNED" value={totalCardioBurn} sub="from cardio" color="#FF6B35" />
+        <StatCard label="TOTAL STEPS" value={totalSteps.toLocaleString()} sub="all time" color="#A78BFA" />
+        <StatCard label="AVG STEPS" value={avgSteps.toLocaleString()} sub="last 7 days" color="#F472B6" />
+      </div>
+      <div style={{fontSize:10,color:"#555",letterSpacing:3,marginBottom:8}}>NUTRITION (7 DAY)</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+        <StatCard label="AVG CALORIES" value={avgCals} sub={targets?`target ${targets.kcal}`:"/day"} color="#4ECDC4" />
+        <StatCard label="DAYS LOGGED" value={`${daysLogged}/7`} sub="last week" color="#FFE66D" />
+      </div>
+      <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:6,padding:14,marginBottom:14}}>
+        <div style={{fontSize:10,color:"#555",letterSpacing:3,marginBottom:10}}>LAST 28 DAYS — WORKOUTS</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(14,1fr)",gap:4}}>
+          {Array.from({length:28}).map((_,i)=>{
+            const d = new Date(today); d.setDate(d.getDate()-(27-i));
+            const dp = plan[d.getDay()];
+            const dl = logs[fmtDate(d)];
+            let intensity = 0;
+            if (dl && !dp.isRest) {
+              const total = dp.exercises.length;
+              const done = dp.exercises.filter((_,j)=>dl[j]).length;
+              if (done>0) intensity = done===total ? 1 : 0.5;
+            }
+            return <div key={i} title={fmtDate(d)} style={{aspectRatio:"1",borderRadius:3,background:dp.isRest?"#1a1a1a":intensity===1?dp.color:intensity===0.5?dp.color+"66":"#1a1a1a"}} />;
+          })}
+        </div>
+      </div>
+      <button onClick={onReset} style={{width:"100%",padding:12,background:"transparent",border:"1px solid #331a1a",color:"#a44",fontSize:10,letterSpacing:3,borderRadius:4}}>RESET ALL DATA</button>
+      <div style={{textAlign:"center",marginTop:24,fontSize:9,color:"#333",letterSpacing:2}}>DATA SAVED LOCALLY · WORKS OFFLINE</div>
+    </div>
+  );
+}
+
+function MacroTarget({ label, value, color }) {
+  return (
+    <div style={{background:"#111",borderRadius:4,padding:8,textAlign:"center"}}>
+      <div style={{fontSize:8,color:"#555",letterSpacing:2}}>{label}</div>
+      <div style={{fontSize:18,color,fontFamily:"'Bebas Neue',sans-serif",lineHeight:1,marginTop:4}}>{value}g</div>
+    </div>
+  );
+}
+
+function ProfileView({ profile, updateProfile, targets }) {
+  const [local, setLocal] = useState(profile);
+  useEffect(()=>setLocal(profile),[profile]);
+  const update = (field, value) => { const newP = { ...local, [field]: value }; setLocal(newP); updateProfile(newP); };
+  return (
+    <div className="fade-in" style={{maxWidth:720,margin:"0 auto",padding:"0 20px"}}>
+      <div style={{fontSize:10,color:"#555",letterSpacing:3,marginBottom:10}}>YOUR STATS</div>
+      <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:8,padding:16,marginBottom:14}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <div>
+            <div style={{fontSize:9,color:"#555",letterSpacing:2,marginBottom:5}}>WEIGHT (KG)</div>
+            <input type="number" value={local.weight} onChange={(e)=>update("weight",e.target.value)} placeholder="75" />
+          </div>
+          <div>
+            <div style={{fontSize:9,color:"#555",letterSpacing:2,marginBottom:5}}>HEIGHT (CM)</div>
+            <input type="number" value={local.height} onChange={(e)=>update("height",e.target.value)} placeholder="175" />
+          </div>
+          <div>
+            <div style={{fontSize:9,color:"#555",letterSpacing:2,marginBottom:5}}>AGE</div>
+            <input type="number" value={local.age} onChange={(e)=>update("age",e.target.value)} placeholder="30" />
+          </div>
+          <div>
+            <div style={{fontSize:9,color:"#555",letterSpacing:2,marginBottom:5}}>SEX</div>
+            <select value={local.sex} onChange={(e)=>update("sex",e.target.value)}>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div style={{fontSize:10,color:"#555",letterSpacing:3,marginBottom:10}}>STEP GOAL</div>
+      <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:8,padding:16,marginBottom:14}}>
+        <input type="number" min="1000" step="500" value={local.stepGoal||10000} onChange={(e)=>update("stepGoal",parseInt(e.target.value)||10000)} />
+      </div>
+      <div style={{fontSize:10,color:"#555",letterSpacing:3,marginBottom:10}}>ACTIVITY LEVEL</div>
+      <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:8,padding:16,marginBottom:14}}>
+        <select value={local.activity} onChange={(e)=>update("activity",e.target.value)}>
+          <option value="sedentary">Sedentary (desk job, little exercise)</option>
+          <option value="light">Light (1–3 days/week training)</option>
+          <option value="moderate">Moderate (3–5 days/week training)</option>
+          <option value="active">Active (6–7 days/week training)</option>
+          <option value="athlete">Athlete (2x/day or hard physical job)</option>
+        </select>
+      </div>
+      <div style={{fontSize:10,color:"#555",letterSpacing:3,marginBottom:10}}>GOAL</div>
+      <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:8,padding:16,marginBottom:14}}>
+        <select value={local.goal} onChange={(e)=>update("goal",e.target.value)}>
+          <option value="cut">Cut — lose fat (-500 kcal)</option>
+          <option value="recomp">Recomp — slow lean (-250 kcal)</option>
+          <option value="maintain">Maintain</option>
+          <option value="lean_bulk">Lean Bulk (+250 kcal)</option>
+          <option value="bulk">Bulk — fast gain (+500 kcal)</option>
+        </select>
+      </div>
+      {targets && <div style={{background:"#0d0d0d",border:"1px solid #FF6B3533",borderLeft:"3px solid #FF6B35",borderRadius:8,padding:16}}>
+        <div style={{fontSize:10,color:"#FF6B35",letterSpacing:3,marginBottom:12}}>YOUR DAILY TARGETS</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+          <div>
+            <div style={{fontSize:9,color:"#555",letterSpacing:2}}>BMR</div>
+            <div style={{fontSize:18,color:"#888",fontFamily:"'Bebas Neue',sans-serif"}}>{targets.bmr} kcal</div>
+          </div>
+          <div>
+            <div style={{fontSize:9,color:"#555",letterSpacing:2}}>TDEE</div>
+            <div style={{fontSize:18,color:"#888",fontFamily:"'Bebas Neue',sans-serif"}}>{targets.tdee} kcal</div>
+          </div>
+        </div>
+        <div style={{background:"#111",borderRadius:4,padding:12,marginBottom:8}}>
+          <div style={{fontSize:9,color:"#555",letterSpacing:2}}>TARGET CALORIES</div>
+          <div style={{fontSize:32,color:"#FF6B35",fontFamily:"'Bebas Neue',sans-serif",lineHeight:1,marginTop:4}}>{targets.kcal} <span style={{fontSize:12,color:"#666"}}>kcal/day</span></div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+          <MacroTarget label="PROTEIN" value={targets.p} color="#FF6B35" />
+          <MacroTarget label="CARBS" value={targets.c} color="#FFE66D" />
+          <MacroTarget label="FAT" value={targets.f} color="#A78BFA" />
+        </div>
+        <div style={{fontSize:10,color:"#666",marginTop:12,lineHeight:1.5}}>Mifflin-St Jeor BMR. Protein 2g/kg, fat 25%. Calorie burn uses MET values.</div>
+      </div>}
+      {!targets && <div style={{padding:20,textAlign:"center",color:"#666",fontSize:12,border:"1px dashed #333",borderRadius:8}}>Fill in weight, height & age to calculate your targets.</div>}
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<IronLog />);
+</script>
+</body>
+</html>
