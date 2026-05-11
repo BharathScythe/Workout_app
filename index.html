@@ -64,80 +64,84 @@ const { useState, useEffect, useMemo } = React;
 
 // ====== DEFAULT WORKOUT PLAN ======
 const defaultPlan = {
-  1: { day: "Monday", label: "Upper Chest · Shoulders · Triceps", tag: "PUSH A", color: "#FF6B35",
-    muscles: ["Upper Chest", "Front Delts", "Side Delts", "Triceps"],
+  1: { day: "Monday", label: "Chest · Shoulders · Triceps", tag: "PUSH A", color: "#FF6B35",
+    muscles: ["Chest", "Shoulders", "Triceps"],
+    warmup: ["Hand rotation", "Pushups", "Face pulls (low weight)"],
     exercises: [
-      { name: "Incline Barbell Press", sets: 4, reps: "6–8", muscle: "Upper Chest", note: "45° incline, full stretch at bottom" },
-      { name: "Incline Dumbbell Fly", sets: 3, reps: "10–12", muscle: "Upper Chest", note: "Control negative, squeeze at top" },
-      { name: "Cable Crossover (High to Low)", sets: 3, reps: "12–15", muscle: "Upper Chest", note: "Focus on upper pec contraction" },
-      { name: "Seated Dumbbell Shoulder Press", sets: 4, reps: "8–10", muscle: "Front/Side Delts", note: "Press to full lockout overhead" },
-      { name: "Lateral Raises", sets: 4, reps: "12–15", muscle: "Side Delts", note: "Slight bend in elbow, lead with pinky" },
-      { name: "Front Raises (Plate)", sets: 3, reps: "12", muscle: "Front Delts", note: "Controlled, no momentum" },
-      { name: "Skull Crushers (EZ-Bar)", sets: 3, reps: "10–12", muscle: "Triceps", note: "Lower bar to forehead slowly" },
-      { name: "Tricep Rope Pushdown", sets: 3, reps: "12–15", muscle: "Triceps", note: "Spread rope at bottom, full extension" },
+      { name: "Chest Fly Machine (Warmup)", sets: 2, reps: "12–15", muscle: "Chest", note: "Light weight, prime the pecs" },
+      { name: "Bench Press", sets: 3, reps: "8–10", muscle: "Mid Chest", note: "Middle/low weight, control the bar" },
+      { name: "Incline Bench Press", sets: 2, reps: "10–12", muscle: "Upper Chest", note: "Higher rep range" },
+      { name: "Incline Dumbbell Shoulder Press", sets: 3, reps: "8–10", muscle: "Front Delts", note: "Incline bench, press to lockout" },
+      { name: "Cable Fly (Low to High)", sets: 2, reps: "12–15", muscle: "Upper Chest", note: "Drive up and across, squeeze" },
+      { name: "Reverse Fly", sets: 3, reps: "12–15", muscle: "Rear Delts", note: "Squeeze shoulder blades together" },
+      { name: "Lateral Raise", sets: 4, reps: "12–15", muscle: "Side Delts", note: "Slight elbow bend, lead with pinky" },
+      { name: "V-Bar Pushdown", sets: 3, reps: "10–12", muscle: "Triceps", note: "Elbows tucked, full extension" },
+      { name: "Straight Bar Pushdown", sets: 3, reps: "10–12", muscle: "Triceps", note: "Pause and squeeze at the bottom" },
+      { name: "Dips (Optional)", sets: 3, reps: "AMRAP", muscle: "Triceps/Chest", note: "Optional finisher — go to failure" },
     ]},
-  2: { day: "Tuesday", label: "Back Pull · Biceps", tag: "PULL A", color: "#4ECDC4",
-    muscles: ["Lats", "Upper Back", "Rear Delts", "Biceps", "Forearms"],
+  2: { day: "Tuesday", label: "Lats · Biceps", tag: "PULL A", color: "#4ECDC4",
+    muscles: ["Lats", "Upper Back", "Biceps"],
+    warmup: ["Rod pushdown"],
     exercises: [
-      { name: "Pull-Ups / Weighted Pull-Ups", sets: 4, reps: "6–8", muscle: "Lats", note: "Full hang to chin over bar" },
-      { name: "Barbell Bent-Over Row", sets: 4, reps: "6–8", muscle: "Upper Back/Lats", note: "Overhand grip, row to belly button" },
-      { name: "Seated Cable Row", sets: 3, reps: "10–12", muscle: "Mid Back", note: "Keep chest up, drive elbows back" },
-      { name: "Single-Arm Dumbbell Row", sets: 3, reps: "10–12", muscle: "Lats", note: "Full ROM, big stretch" },
-      { name: "Face Pulls", sets: 3, reps: "15–20", muscle: "Rear Delts/Traps", note: "Pull to forehead, external rotate" },
-      { name: "Barbell Bicep Curl", sets: 4, reps: "8–10", muscle: "Biceps", note: "No swinging, full supination" },
-      { name: "Incline Dumbbell Curl", sets: 3, reps: "10–12", muscle: "Biceps (Long Head)", note: "Arms behind body for stretch" },
-      { name: "Hammer Curl", sets: 3, reps: "12", muscle: "Brachialis/Forearms", note: "Neutral grip, controlled" },
+      { name: "Pull-Ups", sets: 3, reps: "Till failure", muscle: "Lats", note: "Full hang, chin over bar" },
+      { name: "Lat Pulldown (Wide Grip)", sets: 2, reps: "10–12", muscle: "Outer Lats", note: "Pull to upper chest, elbows wide" },
+      { name: "Lat Pulldown (Normal Grip)", sets: 2, reps: "10–12", muscle: "Lats", note: "Shoulder-width overhand grip" },
+      { name: "Lat Pulldown (U Grip / Underhand)", sets: 2, reps: "10–12", muscle: "Lower Lats", note: "Supinated grip hits lower lats" },
+      { name: "Lat Pulldown (V Grip / Neutral)", sets: 2, reps: "10–12", muscle: "Mid Back", note: "Neutral grip, pull to chest" },
+      { name: "Deadlift with Bicep Bar (EZ Bar)", sets: 3, reps: "8–10", muscle: "Back/Hamstrings", note: "Hinge at hips, brace core" },
+      { name: "Bent-Over Barbell Row", sets: 2, reps: "8–10", muscle: "Upper Back/Lats", note: "Row to belly button" },
+      { name: "Dumbbell Curl", sets: 3, reps: "Till failure", muscle: "Biceps", note: "No swinging, full supination" },
+      { name: "Reverse Curl", sets: 3, reps: "Till failure", muscle: "Forearms/Brachialis", note: "Overhand grip, controlled" },
     ]},
-  3: { day: "Wednesday", label: "Legs · Squats Focus", tag: "LEGS A", color: "#FFE66D",
-    muscles: ["Quads", "Glutes", "Hamstrings", "Calves", "Core"],
+  3: { day: "Wednesday", label: "Legs · Shoulders", tag: "LEGS A", color: "#FFE66D",
+    muscles: ["Quads", "Glutes", "Hamstrings", "Shoulders"],
+    warmup: ["Hamstring curls (low weight)", "Free squat"],
     exercises: [
-      { name: "Barbell Back Squat", sets: 5, reps: "5–6", muscle: "Quads/Glutes", note: "Below parallel, chest tall, knees out" },
-      { name: "Front Squat / Goblet Squat", sets: 3, reps: "8–10", muscle: "Quads", note: "More upright = more quad bias" },
+      { name: "Weighted Squat", sets: 4, reps: "6–8", muscle: "Quads/Glutes", note: "Below parallel, chest tall, knees out" },
       { name: "Leg Press", sets: 3, reps: "10–12", muscle: "Quads/Glutes", note: "Feet shoulder-width, full range" },
-      { name: "Bulgarian Split Squat", sets: 3, reps: "10–12", muscle: "Quads/Glutes", note: "Each leg" },
-      { name: "Leg Extension", sets: 3, reps: "15", muscle: "Quads", note: "Pause at top, control down" },
-      { name: "Romanian Deadlift", sets: 3, reps: "10–12", muscle: "Hamstrings/Glutes", note: "Hinge at hips, feel stretch" },
-      { name: "Seated Calf Raise", sets: 4, reps: "15–20", muscle: "Soleus", note: "Full stretch at bottom" },
-      { name: "Standing Calf Raise", sets: 4, reps: "15–20", muscle: "Gastrocnemius", note: "Straight leg targets gastroc" },
-      { name: "Plank / Ab Wheel", sets: 3, reps: "30–60s", muscle: "Core", note: "Brace abs, neutral spine" },
+      { name: "Lunges (Normal)", sets: 3, reps: "10 each leg", muscle: "Quads/Glutes", note: "Step forward, knee tracks toe" },
+      { name: "Leg Extension", sets: 3, reps: "12–15", muscle: "Quads", note: "Pause at top, control down" },
+      { name: "Overhead Press", sets: 3, reps: "8–10", muscle: "Front Delts", note: "Standing, brace core, press straight up" },
+      { name: "Seated Press", sets: 3, reps: "10–12", muscle: "Shoulders", note: "Strict form, no leg drive" },
+      { name: "Front Raise", sets: 3, reps: "12", muscle: "Front Delts", note: "Controlled, no momentum" },
     ]},
-  4: { day: "Thursday", label: "Lower Chest · Shoulders · Triceps", tag: "PUSH B", color: "#A78BFA",
-    muscles: ["Lower Chest", "Side Delts", "Rear Delts", "Triceps"],
+  4: { day: "Thursday", label: "Chest · Triceps", tag: "PUSH B", color: "#A78BFA",
+    muscles: ["Lower Chest", "Triceps"],
+    warmup: ["Hand rotation", "Pushups", "Face pulls (low weight)"],
     exercises: [
-      { name: "Flat Barbell Bench Press", sets: 4, reps: "6–8", muscle: "Lower/Mid Chest", note: "Touch chest, drive up explosively" },
-      { name: "Decline Dumbbell Press", sets: 3, reps: "10–12", muscle: "Lower Chest", note: "Decline angle hits lower pec" },
-      { name: "Cable Crossover (Low to High)", sets: 3, reps: "12–15", muscle: "Lower Chest", note: "Drive up and across" },
-      { name: "Dips (Chest-Focused)", sets: 3, reps: "10–12", muscle: "Lower Chest", note: "Lean forward, go deep" },
-      { name: "Lateral Raises (Cable)", sets: 4, reps: "12–15", muscle: "Side Delts", note: "Cable keeps tension full ROM" },
-      { name: "Rear Delt Fly", sets: 3, reps: "15", muscle: "Rear Delts", note: "Squeeze shoulder blades" },
-      { name: "Overhead Tricep Extension", sets: 3, reps: "12", muscle: "Triceps", note: "Overhead = long head stretch" },
-      { name: "Tricep Dips", sets: 3, reps: "12–15", muscle: "Triceps", note: "Elbows in tight to body" },
+      { name: "Dips", sets: 3, reps: "10–12", muscle: "Lower Chest/Triceps", note: "Lean forward for chest focus" },
+      { name: "Lower Bench (Decline Bench Press)", sets: 3, reps: "8–10", muscle: "Lower Chest", note: "Decline angle hits lower pec" },
+      { name: "Dumbbell Press (Decline / Lower)", sets: 3, reps: "10–12", muscle: "Lower Chest", note: "Bring DBs together at top" },
+      { name: "Cable Fly (High to Low)", sets: 3, reps: "12–15", muscle: "Lower Chest", note: "Drive down and across, squeeze low" },
+      { name: "Skull Crusher", sets: 3, reps: "10–12", muscle: "Triceps", note: "Lower bar to forehead slowly" },
+      { name: "Rope Overhead Extension", sets: 3, reps: "12", muscle: "Triceps (Long Head)", note: "Overhead = long head stretch" },
+      { name: "V-Bar Pushdown", sets: 3, reps: "10–12", muscle: "Triceps", note: "Elbows tucked, full extension" },
     ]},
-  5: { day: "Friday", label: "Back Push · Biceps", tag: "PULL B", color: "#34D399",
-    muscles: ["Lats", "Traps", "Rhomboids", "Rear Delts", "Biceps"],
+  5: { day: "Friday", label: "Lats · Biceps", tag: "PULL B", color: "#34D399",
+    muscles: ["Lats", "Upper Back", "Traps", "Biceps"],
+    warmup: ["Rod pushdown"],
     exercises: [
-      { name: "Deadlift", sets: 4, reps: "4–5", muscle: "Full Back", note: "King of all exercises. Brace hard." },
-      { name: "Lat Pulldown (Wide Grip)", sets: 4, reps: "8–10", muscle: "Lats", note: "Pull to upper chest" },
-      { name: "T-Bar Row", sets: 3, reps: "8–10", muscle: "Mid Back", note: "Elbows flared = upper back focus" },
-      { name: "Straight-Arm Pulldown", sets: 3, reps: "12–15", muscle: "Lats", note: "Arms straight, hinge at shoulder" },
+      { name: "Dumbbell Seated Row", sets: 3, reps: "10–12", muscle: "Mid Back/Lats", note: "Drive elbows back, squeeze blades" },
+      { name: "Inclined Bench Row (Wide Grip)", sets: 3, reps: "10–12", muscle: "Upper Back", note: "Chest on incline bench, wide grip" },
+      { name: "Inclined Bench Row (Close Grip)", sets: 3, reps: "10–12", muscle: "Mid Back", note: "Chest supported, close grip" },
+      { name: "Inclined Bench Row (Normal Grip)", sets: 3, reps: "10–12", muscle: "Mid Back/Lats", note: "Chest supported, standard grip" },
+      { name: "Seated Row", sets: 3, reps: "10–12", muscle: "Mid Back", note: "Keep chest up, drive elbows back" },
       { name: "Shrugs", sets: 4, reps: "12–15", muscle: "Traps", note: "Straight up, don't roll shoulders" },
-      { name: "EZ-Bar Preacher Curl", sets: 4, reps: "10–12", muscle: "Biceps", note: "Full extension, no cheating" },
-      { name: "Cable Curl", sets: 3, reps: "12–15", muscle: "Biceps", note: "Constant tension" },
-      { name: "Reverse Curl", sets: 3, reps: "12", muscle: "Forearms", note: "Builds forearm thickness" },
+      { name: "Bent-Over Barbell Row", sets: 2, reps: "8–10", muscle: "Upper Back/Lats", note: "Row to belly button" },
+      { name: "Hammer Curl", sets: 3, reps: "Till failure", muscle: "Brachialis/Forearms", note: "Neutral grip, controlled" },
+      { name: "Bicep Curl", sets: 3, reps: "Till failure", muscle: "Biceps", note: "Strict form, full ROM" },
     ]},
-  6: { day: "Saturday", label: "Legs · Hamstrings & Calves", tag: "LEGS B", color: "#F472B6",
-    muscles: ["Hamstrings", "Glutes", "Calves", "Abductors", "Core"],
+  6: { day: "Saturday", label: "Legs · Shoulders", tag: "LEGS B", color: "#F472B6",
+    muscles: ["Hamstrings", "Lower Back", "Calves", "Shoulders"],
+    warmup: ["Hamstring curls (low weight)", "Free squat"],
     exercises: [
-      { name: "Romanian Deadlift", sets: 4, reps: "6–8", muscle: "Hamstrings", note: "Hip hinge king" },
-      { name: "Lying Leg Curl", sets: 4, reps: "10–12", muscle: "Hamstrings", note: "Toes pointed, curl explosively" },
-      { name: "Seated Leg Curl", sets: 3, reps: "12–15", muscle: "Hamstrings", note: "Hits lower ham differently" },
-      { name: "Stiff-Leg Deadlift", sets: 3, reps: "10–12", muscle: "Hamstrings", note: "Stretch at bottom is key" },
-      { name: "Hip Thrust (Barbell)", sets: 4, reps: "10–12", muscle: "Glutes", note: "Drive hips up, squeeze top" },
-      { name: "Cable Kickback", sets: 3, reps: "15", muscle: "Glutes", note: "Full extension, slow negative" },
-      { name: "Abductor Machine", sets: 3, reps: "15–20", muscle: "Abductors", note: "Slow and controlled" },
-      { name: "Standing Calf Raise", sets: 5, reps: "15–20", muscle: "Gastrocnemius", note: "Heavy, full stretch" },
-      { name: "Seated Calf Raise", sets: 4, reps: "20–25", muscle: "Soleus", note: "High reps for soleus" },
-      { name: "Hanging Leg Raise", sets: 3, reps: "15–20", muscle: "Core", note: "Full range, control swing" },
+      { name: "Hamstring Curls", sets: 4, reps: "10–12", muscle: "Hamstrings", note: "Toes pointed down, curl explosively" },
+      { name: "Lower Back (Hyperextension / RDL)", sets: 3, reps: "10–12", muscle: "Lower Back/Hamstrings", note: "Squeeze glutes at top" },
+      { name: "Standing Calf Raises", sets: 4, reps: "15–20", muscle: "Gastrocnemius", note: "Straight leg, heavy, full stretch" },
+      { name: "Seated Calf Raises", sets: 4, reps: "20–25", muscle: "Soleus", note: "High reps for soleus development" },
+      { name: "Arnold Press", sets: 3, reps: "10–12", muscle: "Front/Side Delts", note: "Rotate dumbbells through the press" },
+      { name: "Machine Shoulder Press", sets: 3, reps: "10–12", muscle: "Shoulders", note: "Strict, controlled, full ROM" },
+      { name: "Cable Lateral Raise", sets: 4, reps: "12–15", muscle: "Side Delts", note: "Cable keeps tension full ROM" },
     ]},
   0: { day: "Sunday", label: "Rest & Recovery", tag: "REST", color: "#6B7280",
     muscles: ["Recovery"], exercises: [], isRest: true },
@@ -573,6 +577,18 @@ function TrainView({ selectedDate, setSelectedDate, todayPlan, dayLogs, toggle, 
         <div style={{fontSize:12,color:"#555",marginTop:8}}>Sleep, eat, recover.</div>
       </div>}
       {!todayPlan.isRest && <>
+        {todayPlan.warmup && todayPlan.warmup.length > 0 && (
+          <div style={{background:"#111",border:`1px dashed ${todayPlan.color}55`,borderRadius:6,padding:"10px 14px",marginBottom:10}}>
+            <div style={{fontSize:9,color:todayPlan.color,letterSpacing:3,marginBottom:6}}>🔥 WARMUP</div>
+            <div style={{fontSize:11,color:"#aaa",lineHeight:1.7}}>
+              {todayPlan.warmup.map((w,i) => (
+                <span key={i}>
+                  {w}{i < todayPlan.warmup.length - 1 ? " · " : ""}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         <div style={{display:"flex",gap:6,marginBottom:10}}>
           <button onClick={()=>{setEditMode(!editMode);setEditingIdx(null);}} style={{flex:1,padding:"8px 12px",background:editMode?todayPlan.color:"#1a1a1a",color:editMode?"#000":"#888",border:`1px solid ${editMode?todayPlan.color:"#222"}`,borderRadius:4,fontSize:10,letterSpacing:2,fontWeight:editMode?700:400}}>{editMode?"✓ DONE EDITING":"✎ EDIT WORKOUT"}</button>
           {customPlan && <button onClick={()=>{if(confirm("Reset to default workout plan?")) resetPlan();}} style={{padding:"8px 12px",background:"transparent",border:"1px solid #331a1a",color:"#a44",borderRadius:4,fontSize:10,letterSpacing:2}}>RESET PLAN</button>}
@@ -1148,12 +1164,121 @@ function MacroTarget({ label, value, color }) {
   );
 }
 
+function BackupSection() {
+  const [importing, setImporting] = useState(false);
+  const [message, setMessage] = useState(null);
+
+  const KEYS = ["workout-logs", "food-logs", "cardio-logs", "step-logs", "profile", "custom-foods", "custom-plan"];
+
+  const exportData = () => {
+    try {
+      const backup = {
+        app: "IRON LOG",
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        data: {},
+      };
+      for (const key of KEYS) {
+        const val = localStorage.getItem(key);
+        if (val !== null) backup.data[key] = val;
+      }
+      const json = JSON.stringify(backup, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const ts = new Date().toISOString().slice(0,10);
+      a.href = url;
+      a.download = `iron-log-backup-${ts}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      const itemCount = Object.keys(backup.data).length;
+      setMessage({ type: "ok", text: `✓ Exported ${itemCount} data ${itemCount===1?"category":"categories"}. File saved to your downloads.` });
+      setTimeout(()=>setMessage(null), 5000);
+    } catch (e) {
+      setMessage({ type: "err", text: `Export failed: ${e.message}` });
+    }
+  };
+
+  const handleImport = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const backup = JSON.parse(event.target.result);
+        if (!backup || backup.app !== "IRON LOG" || !backup.data) {
+          throw new Error("Not a valid IRON LOG backup file");
+        }
+        const keysFound = Object.keys(backup.data).filter(k => KEYS.includes(k));
+        if (keysFound.length === 0) throw new Error("Backup file is empty or contains no recognized data");
+
+        const proceed = confirm(
+          `Restore backup from ${new Date(backup.exportedAt).toLocaleString()}?\n\n` +
+          `This will REPLACE all current data:\n${keysFound.map(k=>"• "+k).join("\n")}\n\n` +
+          `Your current data will be lost. Continue?`
+        );
+        if (!proceed) { setImporting(false); e.target.value = ""; return; }
+
+        for (const key of keysFound) {
+          localStorage.setItem(key, backup.data[key]);
+        }
+        setMessage({ type: "ok", text: `✓ Imported ${keysFound.length} categories. Reloading app...` });
+        setTimeout(()=>window.location.reload(), 1200);
+      } catch (err) {
+        setMessage({ type: "err", text: `Import failed: ${err.message}` });
+        setImporting(false);
+      }
+      e.target.value = "";
+    };
+    reader.onerror = () => {
+      setMessage({ type: "err", text: "Could not read file" });
+      setImporting(false);
+      e.target.value = "";
+    };
+    reader.readAsText(file);
+  };
+
+  return (
+    <>
+      <div style={{fontSize:10,color:"#555",letterSpacing:3,marginBottom:10}}>💾 BACKUP & RESTORE</div>
+      <div style={{background:"#111",border:"1px solid #1e1e1e",borderLeft:"3px solid #34D399",borderRadius:8,padding:16,marginBottom:14}}>
+        <div style={{fontSize:10,color:"#888",lineHeight:1.6,marginBottom:12}}>
+          Save all your data (workouts, food, cardio, steps, profile, custom foods) to a JSON file. Restore on this device or transfer to another phone.
+        </div>
+        <div style={{display:"flex",gap:8,marginBottom:10}}>
+          <button onClick={exportData}
+            style={{flex:1,padding:12,background:"#34D399",color:"#000",border:"none",borderRadius:4,fontSize:11,letterSpacing:2,fontWeight:700}}>
+            ⬇ EXPORT DATA
+          </button>
+          <label style={{flex:1,padding:12,background:"#1a1a1a",color:"#34D399",border:"1px solid #34D39955",borderRadius:4,fontSize:11,letterSpacing:2,fontWeight:700,textAlign:"center",cursor:"pointer",opacity:importing?0.5:1}}>
+            ⬆ IMPORT DATA
+            <input type="file" accept=".json,application/json" onChange={handleImport} style={{display:"none"}} disabled={importing} />
+          </label>
+        </div>
+        {message && (
+          <div style={{padding:10,background:message.type==="ok"?"#0a2a1a":"#3a1212",border:`1px solid ${message.type==="ok"?"#34D39955":"#FF6B6B55"}`,borderRadius:4,fontSize:10,color:message.type==="ok"?"#34D399":"#FF6B6B",lineHeight:1.5}}>
+            {message.text}
+          </div>
+        )}
+        <div style={{fontSize:9,color:"#555",marginTop:10,lineHeight:1.5}}>
+          💡 Tip: Export before each app update for extra safety. Saved files contain only your data — share/sync via Drive, email, anywhere.
+        </div>
+      </div>
+    </>
+  );
+}
+
 function ProfileView({ profile, updateProfile, targets }) {
   const [local, setLocal] = useState(profile);
   useEffect(()=>setLocal(profile),[profile]);
   const update = (field, value) => { const newP = { ...local, [field]: value }; setLocal(newP); updateProfile(newP); };
   return (
     <div className="fade-in" style={{maxWidth:720,margin:"0 auto",padding:"0 20px"}}>
+      <BackupSection />
+
       <div style={{fontSize:10,color:"#555",letterSpacing:3,marginBottom:10}}>YOUR STATS</div>
       <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:8,padding:16,marginBottom:14}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
